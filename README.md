@@ -45,7 +45,8 @@ and a keyboard); MyGo's evdev plugin reads every pad.
 ## Build and deploy
 
 ```sh
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o nx2l-launcher .
+. /Volumes/FANXINAG/nx2linux/env.sh   # Go and caches on the external drive
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o $NX2L_BUILD/nx2l-launcher .
 ```
 
 Device folder `/storage/nx2linux/launcher`: `nx2l-launcher`, `session.sh`, `sway-launcher.conf`, `nx2l-launcher.service`, `launcherctl`.
