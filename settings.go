@@ -100,8 +100,17 @@ type category struct {
 	rows       func(l *launcher) []row
 }
 
-func toggle(label string, on bool, set func(bool), l *launcher, what string) row {
-	return row{kind: kToggle, label: label, on: on, act: func() { l.do(what, func() string { set(!on); return "" }) }}
+// toggle flips *on in the state at once, so the switch shows it and a second press reads it, and applies it in the background
+func toggle(label string, on *bool, set func(bool), l *launcher, what string) row {
+	return row{kind: kToggle, label: label, on: *on, act: func() {
+		if l.busy != "" {
+			l.say("请稍候：" + l.busy)
+			return
+		}
+		want := !*on
+		*on = want
+		l.do(what, func() string { set(want); return "" })
+	}}
 }
 
 func choice(label, value string, adjust func(d int)) row {
@@ -115,7 +124,7 @@ func header(label string) row { return row{kind: kHeader, label: label} }
 var categories = []category{
 	{"网络", "◉", func(l *launcher) []row {
 		s := &l.s
-		rs := []row{toggle("Wi-Fi", s.wifi.enabled, setWifi, l, "切换 Wi-Fi")}
+		rs := []row{toggle("Wi-Fi", &s.wifi.enabled, setWifi, l, "切换 Wi-Fi")}
 		if s.wifi.enabled {
 			cur := "未连接"
 			if s.wifi.ssid != "" {
@@ -147,14 +156,14 @@ var categories = []category{
 			}
 		}
 		rs = append(rs, header("网络服务"),
-			toggle("SSH 远程登录", s.ssh, setSSH, l, "切换 SSH"),
-			toggle("Samba 文件共享", s.samba, func(on bool) { setService("smbd", "samba.enabled", on) }, l, "切换 Samba"),
-			toggle("Syncthing 同步", s.syncthing, func(on bool) { setService("syncthing", "syncthing.enabled", on) }, l, "切换 Syncthing"))
+			toggle("SSH 远程登录", &s.ssh, setSSH, l, "切换 SSH"),
+			toggle("Samba 文件共享", &s.samba, func(on bool) { setService("smbd", "samba.enabled", on) }, l, "切换 Samba"),
+			toggle("Syncthing 同步", &s.syncthing, func(on bool) { setService("syncthing", "syncthing.enabled", on) }, l, "切换 Syncthing"))
 		return rs
 	}},
 	{"蓝牙", "◈", func(l *launcher) []row {
 		s := &l.s
-		rs := []row{toggle("蓝牙", s.bt, setBluetooth, l, "切换蓝牙")}
+		rs := []row{toggle("蓝牙", &s.bt, setBluetooth, l, "切换蓝牙")}
 		if !s.bt {
 			return rs
 		}
@@ -247,7 +256,7 @@ var categories = []category{
 				tz := cycle(timezones, s.timezone, d)
 				l.do("时区："+tz, func() string { return setTimezone(tz) })
 			}),
-			toggle("网络时间同步", s.timesync, func(on bool) { setService("systemd-timesyncd", "", on) }, l, "切换时间同步"),
+			toggle("网络时间同步", &s.timesync, func(on bool) { setService("systemd-timesyncd", "", on) }, l, "切换时间同步"),
 			header("关于"),
 			info("IP 地址", orDash(s.wifi.ip)),
 			info("存储空间", s.storage+" 可用"),

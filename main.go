@@ -7,7 +7,7 @@
 // launcher reads no input while it runs.
 //
 // NX2L_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
-// and "find <category> <label>" (testing on the device with screenshots).
+// "find <category> <label>" and "type <text>" (the open keyboard), for testing on the device with screenshots.
 package main
 
 import (
@@ -89,11 +89,13 @@ type modal interface {
 // do runs an action off the main thread, then reads the state again and shows its outcome
 func (l *launcher) do(what string, f func() string) {
 	if l.busy != "" {
+		l.say("请稍候：" + l.busy)
 		return
 	}
 	l.busy, l.note = what, ""
 	go func() {
 		out := f()
+		log.Printf("%s: %s", what, firstLine(out))
 		l.refresh(true)
 		l.win.Update(func() { l.busy = ""; l.say(firstLine(out)) })
 	}()
@@ -257,20 +259,23 @@ func (l *launcher) input() {
 	}
 }
 
-// find selects the first row of a category whose label holds label (NX2L_CTL "find <category> <label>")
-func (l *launcher) find(cat, label string) {
+// find selects the first row of a category whose label or value holds text (NX2L_CTL "find <category> <text>"); when none does, the
+// focus goes back to the games, so the presses after it do nothing in the settings
+func (l *launcher) find(cat, text string) {
+	l.modal = nil
 	for i, k := range categories {
 		if k.name != cat {
 			continue
 		}
-		l.cat, l.focus, l.modal = i, fRows, nil
 		for j, r := range k.rows(l) {
-			if r.kind != kHeader && strings.Contains(r.label, label) {
-				l.sel = j
+			if r.kind != kHeader && (strings.Contains(r.label, text) || strings.Contains(r.value, text)) {
+				l.cat, l.focus, l.sel = i, fRows, j
 				return
 			}
 		}
 	}
+	log.Printf("NX2L_CTL find %s %s: no such row", cat, text)
+	l.focus = fGames
 }
 
 // control reads button names from NX2L_CTL, a FIFO it makes; "find <category> <label>" selects a row
@@ -292,6 +297,12 @@ func (l *launcher) control(path string) {
 				l.win.Update(func() { l.press(b) })
 			} else if cat, label, ok := strings.Cut(strings.TrimPrefix(line, "find "), " "); ok && strings.HasPrefix(line, "find ") {
 				l.win.Update(func() { l.find(cat, label) })
+			} else if text, ok := strings.CutPrefix(line, "type "); ok {
+				l.win.Update(func() {
+					if k, ok := l.modal.(*keyboard); ok {
+						k.text += text
+					}
+				})
 			}
 		}
 		f.Close()

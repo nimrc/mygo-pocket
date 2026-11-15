@@ -324,8 +324,15 @@ func clamp(v, lo, hi int) int { return max(lo, min(hi, v)) }
 
 // ---- Wi-Fi: joining with a password, forgetting ----
 
+// joinWifi joins a secured network with its password. A failed join leaves NetworkManager a profile with the wrong secret, which would
+// make the network look saved: it goes, and NetworkManager goes back to the network it had
 func joinWifi(ssid, password string) string {
-	return run(40*time.Second, "nmcli", "dev", "wifi", "connect", ssid, "password", password)
+	out := run(40*time.Second, "nmcli", "dev", "wifi", "connect", ssid, "password", password)
+	if strings.Contains(out, "successfully activated") {
+		return "已连接 " + ssid
+	}
+	run(10*time.Second, "nmcli", "con", "delete", "id", ssid)
+	return "连接失败：" + firstLine(out)
 }
 
 func forgetWifi(ssid string) string { return run(10*time.Second, "nmcli", "con", "delete", "id", ssid) }
