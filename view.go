@@ -186,9 +186,12 @@ func (l *launcher) gamesView(c *ui.Context, w float32) {
 			for i, g := range games {
 				sel := i == l.card
 				cover := covers[g.id]
-				card := ui.Box(c).Size(cw, ch).Radius(22).Clip()
+				// the chosen card grows by its size, not a transform: a clip or a rounded image under a transform is masked on the CPU
+				// (MyGo's raster), which took 1.4 cores while the choice moved; axis-aligned rounded rectangles stay on the GPU
+				card := ui.Box(c).Radius(22)
 				grow := card.Animate("grow", pick[float32](sel, 1, 0), 160*time.Millisecond)
-				card.Scale(1+0.08*grow, 1+0.08*grow).Opacity(0.6 + 0.4*grow)
+				k := 1 + 0.08*grow
+				card.Size(cw*k, ch*k).Opacity(0.6 + 0.4*grow)
 				if sel {
 					card.Border(2, ui.RGBA(255, 255, 255, 0.7)).Shadow(0, 16, 48, 0, g.from.Alpha(0.7))
 				}
@@ -197,7 +200,7 @@ func (l *launcher) gamesView(c *ui.Context, w float32) {
 				}
 				card.Children(func() {
 					if cover != nil {
-						ui.Image(c, cover).Size(cw, ch).Fit(ui.Cover)
+						ui.Image(c, cover).Size(cw*k, ch*k).Fit(ui.Cover).Radius(22)
 						return
 					}
 					ui.Column(c).Fill().Padding(16).Justify(ui.End).Children(func() {

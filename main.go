@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -382,6 +383,11 @@ func (l *launcher) control(path string) {
 }
 
 func main() {
+	if path := os.Getenv("NX2L_PPROF"); path != "" { // a CPU profile of the first 20 s, for finding what a frame costs
+		if f, err := os.Create(path); err == nil && pprof.StartCPUProfile(f) == nil {
+			time.AfterFunc(20*time.Second, func() { pprof.StopCPUProfile(); f.Close(); log.Printf("profile written to %s", path) })
+		}
+	}
 	l := &launcher{zoom: readZoom()}
 	loadCovers()
 	mygo.App.WhenReady(func() {

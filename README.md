@@ -42,6 +42,17 @@ and a keyboard); MyGo's evdev plugin reads every pad.
 `NX2L_CTL=/run/nx2l.ctl` (set in `sway-launcher.conf`) is a FIFO of button names (`up down left right a b x l r start back`) and
 `find <category> <label>`, which selects a row. With `grim` for screenshots, every screen and setting can be driven over SSH.
 
+## Covers
+
+`fetch-art.sh <dir>` fetches each game's Steam library capsule (600x900) as `<id>.jpg`; the launcher reads them from `art/` beside its
+executable. They are the publishers' art, so they stay on the device and out of git.
+
+## Performance
+
+A clip or a rounded image under a transform (`Scale`) is masked on the CPU by MyGo's raster: the cards grew by `Scale` inside a `Clip`
+and took 1.4 cores while the choice moved. They grow by their size instead, so every rounded rectangle stays axis-aligned and on the GPU
+(0.35 core while moving, 3% idle). `NX2L_PPROF=<file>` writes a CPU profile of the launcher's first 20 s.
+
 ## Build and deploy
 
 ```sh
