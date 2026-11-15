@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schema/pocket.schema.json",
+  "kind": "command",
+  "title": "RetroArch",
+  "tag": "RETRO",
+  "color": "#6d28d9",
+  "exec": ["retroarch"],
+  "steam_appid": 1118310,
+  "order": 90
+}

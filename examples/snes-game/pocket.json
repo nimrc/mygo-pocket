@@ -1,0 +1,8 @@
+{
+  "$schema": "../../schema/pocket.schema.json",
+  "kind": "retroarch",
+  "title": "My SNES Game",
+  "core": "snes9x",
+  "rom": "game.sfc",
+  "color": "#047857"
+}

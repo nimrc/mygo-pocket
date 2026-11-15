@@ -1,0 +1,17 @@
+# mygo-pocket in place of EmulationStation (pocketctl enable copies it to /storage/.config/system.d/)
+[Unit]
+Description=mygo-pocket handheld launcher (MyGo, sway)
+After=rocknix-automount.service
+Conflicts=essway.service sway.service
+
+[Service]
+Type=simple
+Environment=HOME=/storage
+Environment=XDG_RUNTIME_DIR=/var/run/0-runtime-dir
+ExecStart=/storage/mygo-pocket/session.sh
+WorkingDirectory=/storage
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=rocknix.target

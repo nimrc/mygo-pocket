@@ -1,0 +1,8 @@
+{
+  "$schema": "../../schema/pocket.schema.json",
+  "title": "空洞骑士：丝之歌",
+  "subtitle": "Hollow Knight: Silksong",
+  "color": "#9f1239",
+  "steam_appid": 1030300,
+  "order": 10
+}

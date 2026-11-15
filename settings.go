@@ -218,7 +218,7 @@ var categories = []category{
 					}
 				}
 				l.zoom = zooms[clamp(i+d, 0, len(zooms)-1)]
-				go setSetting("nx2l.ui.zoom", fmt.Sprint(l.zoom))
+				go setSetting("mygo-pocket.ui.zoom", fmt.Sprint(l.zoom))
 			}),
 		}
 	}},
@@ -387,7 +387,7 @@ var zooms = []float32{1, 1.25, 1.5, 1.75, 2}
 
 func readZoom() float32 {
 	var z float32
-	if _, err := fmt.Sscan(getSetting("nx2l.ui.zoom"), &z); err != nil || z < 1 || z > 2 {
+	if _, err := fmt.Sscan(getSetting("mygo-pocket.ui.zoom"), &z); err != nil || z < 1 || z > 2 {
 		return 1.5
 	}
 	return z

@@ -1,12 +1,12 @@
-// nx2l launcher: the Retroid Pocket Flip 2's home screen on ROCKNIX. A fullscreen MyGo window in a sway session of its own (session.sh,
-// sway-launcher.conf): the games found under $NX2L_GAMES (games.go) and the handheld's settings through ROCKNIX's tools (system.go).
+// mygo-pocket: a handheld's home screen on ROCKNIX, in place of EmulationStation. A fullscreen MyGo window in a sway session of its own
+// (dist/session.sh, dist/sway.conf): the games found under $MYGO_POCKET_GAMES (games.go) and the handheld's settings through ROCKNIX's tools (system.go).
 //
 // Gamepad: L/R switch between Games and Settings. Games: left/right choose, A starts. Settings: the category list on the left (up/down,
 // right or A enters it), its rows on the right (up/down choose, left/right change, A does, X the row's second action, B back). Touch: a tap
 // does what A does, a finger drags a slider (MYGO_TOUCH_POINTER). A game runs as a child process, fullscreen above the launcher; the
 // launcher reads no input while it runs.
 //
-// NX2L_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
+// MYGO_POCKET_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
 // "find <category> <label>" and "type <text>" (the open keyboard), for testing on the device with screenshots.
 package main
 
@@ -70,7 +70,7 @@ type launcher struct {
 	modal   modal // a keyboard or a confirmation over everything, nil when none
 
 	slideBrightness, slideVolume float64 // the sliders' values, following the state unless a finger moves them
-	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as nx2l.ui.zoom in ROCKNIX's settings
+	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as mygo-pocket.ui.zoom in ROCKNIX's settings
 }
 
 // modal takes the buttons while it is open
@@ -146,7 +146,7 @@ func (l *launcher) anchor(rows []row) []row {
 	return rows
 }
 
-// press is every button press, from the gamepad or NX2L_CTL, on the main thread
+// press is every button press, from the gamepad or MYGO_POCKET_CTL, on the main thread
 func (l *launcher) press(b button) {
 	if l.running != "" {
 		return
@@ -305,7 +305,7 @@ func (l *launcher) input() {
 	}
 }
 
-// find selects the first row of a category whose label or value holds text (NX2L_CTL "find <category> <text>"); when none does, the
+// find selects the first row of a category whose label or value holds text (MYGO_POCKET_CTL "find <category> <text>"); when none does, the
 // focus stays on the settings' categories, where the presses after it cannot start a game or change a setting
 func (l *launcher) find(cat, text string) {
 	l.modal = nil
@@ -320,15 +320,15 @@ func (l *launcher) find(cat, text string) {
 			}
 		}
 	}
-	log.Printf("NX2L_CTL find %s %s: no such row", cat, text)
+	log.Printf("MYGO_POCKET_CTL find %s %s: no such row", cat, text)
 	l.focus = fCategories
 }
 
-// control reads button names from NX2L_CTL, a FIFO it makes; "find <category> <label>" selects a row
+// control reads button names from MYGO_POCKET_CTL, a FIFO it makes; "find <category> <label>" selects a row
 func (l *launcher) control(path string) {
 	os.Remove(path)
 	if err := syscall.Mkfifo(path, 0600); err != nil {
-		log.Printf("NX2L_CTL %s: %v", path, err)
+		log.Printf("MYGO_POCKET_CTL %s: %v", path, err)
 		return
 	}
 	for {
@@ -356,19 +356,19 @@ func (l *launcher) control(path string) {
 }
 
 func main() {
-	if path := os.Getenv("NX2L_PPROF"); path != "" { // a CPU profile of the first 20 s, for finding what a frame costs
+	if path := os.Getenv("MYGO_POCKET_PPROF"); path != "" { // a CPU profile of the first 20 s, for finding what a frame costs
 		if f, err := os.Create(path); err == nil && pprof.StartCPUProfile(f) == nil {
 			time.AfterFunc(20*time.Second, func() { pprof.StopCPUProfile(); f.Close(); log.Printf("profile written to %s", path) })
 		}
 	}
 	l := &launcher{zoom: readZoom(), games: scanGames()}
 	mygo.App.WhenReady(func() {
-		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
+		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
 		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
 		go l.refresh(true)
 		go l.input()
-		if p := os.Getenv("NX2L_CTL"); p != "" {
+		if p := os.Getenv("MYGO_POCKET_CTL"); p != "" {
 			go l.control(p)
 		}
 		go func() {

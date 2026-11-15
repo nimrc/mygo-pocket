@@ -1,4 +1,4 @@
-module github.com/nimrc/nx2linux/launcher-mygo
+module github.com/nimrc/mygo-pocket
 
 go 1.27.4
 

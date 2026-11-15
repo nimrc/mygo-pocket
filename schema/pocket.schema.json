@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/nimrc/mygo-pocket/main/schema/pocket.schema.json",
+  "title": "mygo-pocket card",
+  "description": "pocket.json: one card on mygo-pocket's games screen. The directory holding it is the card; its name is the card's id.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "enum": ["nx2linux", "mygo", "native", "command", "retroarch"],
+      "description": "nx2linux: a Switch port (nx2a-data.json beside, launch.sh at the root runs it; the default when nx2a-data.json is there). mygo: a MyGo app in the directory. native: any other program in the directory. command: a program on PATH. retroarch: one ROM run by a libretro core."
+    },
+    "title": { "type": "string", "description": "The card's name. Required except for nx2linux, which defaults to nx2a-data.json's name." },
+    "subtitle": { "type": "string", "description": "A second line under the title, e.g. the original name." },
+    "tag": { "type": "string", "description": "The pill beside the title. Defaults by kind." },
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "description": "The card's light on the wallpaper. Defaults to a colour picked from the id." },
+    "cover": { "type": "string", "description": "A 2:3 poster in the directory. Defaults to cover.jpg or cover.png." },
+    "steam_appid": { "type": "integer", "description": "fetch-art.sh downloads this Steam app's 600x900 library capsule as cover.jpg." },
+    "exec": {
+      "type": "array", "items": { "type": "string" }, "minItems": 1,
+      "description": "argv. mygo and native: exec[0] is relative to the directory. command: exec[0] is looked up on PATH."
+    },
+    "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Extra environment. GAME_DIR is always set to the directory." },
+    "core": { "type": "string", "description": "retroarch: the libretro core's name (snes9x, mgba, gambatte, ...)." },
+    "rom": { "type": "string", "description": "retroarch: the ROM, relative to the directory." },
+    "order": { "type": "integer", "default": 0, "description": "Cards sort by order, then title." },
+    "hidden": { "type": "boolean", "default": false, "description": "Keeps the directory off the games screen." }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "enum": ["mygo", "native", "command"] } }, "required": ["kind"] }, "then": { "required": ["title", "exec"] } },
+    { "if": { "properties": { "kind": { "const": "retroarch" } }, "required": ["kind"] }, "then": { "required": ["title", "core", "rom"] } }
+  ],
+  "additionalProperties": false
+}

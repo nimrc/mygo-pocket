@@ -1,11 +1,12 @@
 package main
 
-// The games are found, not listed: each directory under the roots ($NX2L_GAMES, colon-separated; default /storage/nx2linux) is a card
-// when it holds an nx2l-game.json (game.schema.json) or an nx2linux data pack (porter's nx2a-data.json), its id the directory's name.
+// The games are found, not listed: each directory under the roots ($MYGO_POCKET_GAMES, colon-separated; default /storage/games:/storage/nx2linux) is a card
+// when it holds a pocket.json (schema/pocket.schema.json) or an nx2linux data pack (porter's nx2a-data.json), its id the directory's name.
 // A card is one of the kinds below, so a game is installed on any handheld by copying its directory over, and removed by deleting it.
 //
 //	nx2linux   a Switch port: launch.sh at the root runs the directory's dmhost on it (found by nx2a-data.json alone)
-//	native     a program in the directory, exec[0] relative to it: a MyGo app, an SDL game, a script
+//	mygo       a MyGo app in the directory, exec[0] relative to it (its window goes fullscreen above the launcher in the same sway)
+//	native     any other program in the directory, exec[0] relative to it: an SDL game, a script
 //	command    a program on PATH, exec[0] as is: retroarch, a system tool
 //	retroarch  one retro game: RetroArch runs the core on the ROM in the directory
 
@@ -24,10 +25,11 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const manifestName = "nx2l-game.json"
+const manifestName = "pocket.json"
 
-// manifest is nx2l-game.json (game.schema.json)
+// manifest is pocket.json (schema/pocket.schema.json)
 type manifest struct {
+	Schema   string            `json:"$schema"`
 	Kind     string            `json:"kind"`
 	Title    string            `json:"title"`
 	Subtitle string            `json:"subtitle"`
@@ -61,10 +63,10 @@ type game struct {
 }
 
 func gameRoots() []string {
-	if s := os.Getenv("NX2L_GAMES"); s != "" {
+	if s := os.Getenv("MYGO_POCKET_GAMES"); s != "" {
 		return filepath.SplitList(s)
 	}
-	return []string{"/storage/nx2linux"}
+	return []string{"/storage/games", "/storage/nx2linux"}
 }
 
 // scanGames reads the roots, ordered by the manifests' order, then title
@@ -118,11 +120,11 @@ func readGame(root, dir string) (game, bool) {
 		g.tag = cmp(g.tag, "SWITCH · NX2LINUX")
 		g.argv = []string{filepath.Join(root, "launch.sh")}
 		g.env = append(g.env, "DATA="+dir)
-	case "native":
+	case "mygo", "native":
 		if len(m.Exec) == 0 {
-			return fail("a native card needs exec")
+			return fail("a " + m.Kind + " card needs exec")
 		}
-		g.tag = cmp(g.tag, "APP")
+		g.tag = cmp(g.tag, map[string]string{"mygo": "MYGO", "native": "APP"}[m.Kind])
 		g.argv = append([]string{filepath.Join(dir, m.Exec[0])}, m.Exec[1:]...)
 	case "command":
 		if len(m.Exec) == 0 {

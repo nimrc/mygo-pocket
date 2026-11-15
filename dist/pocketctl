@@ -1,0 +1,24 @@
+#!/bin/sh
+# pocketctl enable|disable|start|stop|restart
+#   enable:  at boot ROCKNIX starts mygo-pocket instead of EmulationStation (the unit in /storage/.config/system.d; profile.d/099-mygo-pocket sets
+#            UI_SERVICE), and EmulationStation can no longer start: emustation.service is masked, and essway.service gets a drop-in whose condition
+#            never holds (ROCKNIX's 111-sway-init unmasks essway at every boot, but leaves drop-ins alone). /usr is read-only: this is ES's removal.
+#   disable: ROCKNIX's own UI_SERVICE and EmulationStation at boot again
+#   start, stop, restart: the launcher now (the unit conflicts with ROCKNIX's sway and EmulationStation units)
+DIR="$(cd "$(dirname "$0")" && pwd)"
+SYSD=/storage/.config/system.d UNIT=/storage/.config/system.d/mygo-pocket.service PROFILE=/storage/.config/profile.d/099-mygo-pocket
+case "$1" in
+  enable)
+    cp "$DIR/mygo-pocket.service" "$UNIT"
+    echo 'UI_SERVICE="mygo-pocket.service"' > "$PROFILE"
+    ln -sf /dev/null "$SYSD/emustation.service"
+    mkdir -p "$SYSD/essway.service.d"
+    printf '[Unit]\n# mygo-pocket (pocketctl): EmulationStation is not started\nConditionPathExists=/nonexistent/mygo-pocket-no-emulationstation\n' > "$SYSD/essway.service.d/mygo-pocket-off.conf"
+    systemctl daemon-reload ;;
+  disable)
+    rm -f "$UNIT" "$PROFILE" "$SYSD/emustation.service" "$SYSD/essway.service.d/mygo-pocket-off.conf"
+    rmdir "$SYSD/essway.service.d" 2>/dev/null
+    systemctl daemon-reload ;;
+  start|stop|restart) systemctl "$1" mygo-pocket.service ;;
+  *) echo "usage: $0 enable|disable|start|stop|restart"; exit 2 ;;
+esac
