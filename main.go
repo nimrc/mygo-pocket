@@ -54,6 +54,8 @@ type row struct {
 	label, value string
 	adjust       func(d int) // left/right and − / +; nil when the row has no value to step
 	act          func()      // A and a tap; nil when it does nothing
+	slider       *float64    // a value a finger drags (MyGo's touch pointer mode); set takes it
+	set          func(v int)
 }
 
 type page struct {
@@ -71,6 +73,7 @@ type launcher struct {
 	busy    string // an action in progress
 	note    string // the last action's outcome
 	pages   []page
+	slideBrightness, slideVolume float64 // the sliders' values, following s unless a finger moves them
 }
 
 func (l *launcher) refresh(full bool) {
@@ -163,12 +166,12 @@ func (l *launcher) buildPages() {
 					v := clamp(s.brightness+d*5, 5, 100)
 					l.s.brightness = v
 					go setBrightness(v)
-				}},
+				}, slider: &l.slideBrightness, set: func(v int) { v = clamp(v, 5, 100); l.s.brightness = v; go setBrightness(v) }},
 				{label: "音量", value: fmt.Sprintf("%d%%", s.volume), adjust: func(d int) {
 					v := clamp(s.volume+d*5, 0, 100)
 					l.s.volume = v
 					go setVolume(v)
-				}},
+				}, slider: &l.slideVolume, set: func(v int) { l.s.volume = v; go setVolume(v) }},
 				{label: "静音", value: onOff(s.muted), act: func() { l.s.muted = !l.s.muted; go toggleMute() }},
 			}
 		}},
@@ -240,6 +243,7 @@ var (
 
 func (l *launcher) view(c *ui.Context) {
 	s := &l.s
+	l.slideBrightness, l.slideVolume = float64(s.brightness), float64(s.volume)
 	rows := l.pages[l.page].rows(s)
 	l.sel = clamp(l.sel, 0, max(0, len(rows)-1))
 	ui.Column(c).Fill().Background(cBg).Padding(28).Gap(20).Children(func() {
@@ -271,6 +275,12 @@ func (l *launcher) view(c *ui.Context) {
 					ui.Text(c, r.label).FontSize(26).TextColor(cText).Grow(1)
 					if r.value != "" {
 						ui.Text(c, r.value).FontSize(22).TextColor(map[bool]ui.Color{true: cText, false: cMuted}[i == l.sel])
+					}
+					if r.slider != nil {
+						if ui.Slider(c, r.slider, 0, 100).Width(360).Changed() {
+							l.sel = i
+							r.set(int(*r.slider + 0.5))
+						}
 					}
 					if r.adjust != nil {
 						if ui.Button(c, "  −  ").Clicked() {
