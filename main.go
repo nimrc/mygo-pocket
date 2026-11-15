@@ -260,7 +260,7 @@ func (l *launcher) input() {
 }
 
 // find selects the first row of a category whose label or value holds text (NX2L_CTL "find <category> <text>"); when none does, the
-// focus goes back to the games, so the presses after it do nothing in the settings
+// focus stays on the settings' categories, where the presses after it cannot start a game or change a setting
 func (l *launcher) find(cat, text string) {
 	l.modal = nil
 	for i, k := range categories {
@@ -275,7 +275,7 @@ func (l *launcher) find(cat, text string) {
 		}
 	}
 	log.Printf("NX2L_CTL find %s %s: no such row", cat, text)
-	l.focus = fGames
+	l.focus = fCategories
 }
 
 // control reads button names from NX2L_CTL, a FIFO it makes; "find <category> <label>" selects a row
