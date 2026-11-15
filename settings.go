@@ -39,20 +39,21 @@ func (l *launcher) refresh(full bool) {
 		cpuTemp: hottest("cpu"), gpuTemp: hottest("gpu"), fanSpeed: fanSpeed(), governor: readGovernor(), gpuGovernor: readGPUGovernor(),
 		cpuFreq: cpuFreqs(), gpuFreq: gpuFreq(), memory: memoryFree(), uptime: uptime()}
 	n.volume, n.muted = readVolume()
+	// the switches every refresh (systemctl is-active takes milliseconds): a switch shown from a stale reading flips the wrong way
+	n.bt, n.ssh, n.samba, n.syncthing, n.timesync = bluetoothOn(), sshOn(), serviceOn("smbd"), serviceOn("syncthing"), serviceOn("systemd-timesyncd")
 	if full {
-		n.bt = bluetoothOn()
 		if n.bt {
 			n.btDevs = readBtDevices()
 		}
 		n.sinks = readSinks()
 		n.nets = markInUse(cachedWifi(), n.wifi.ssid)
-		n.fan, n.ssh, n.samba, n.syncthing, n.timesync = readFanProfile(), sshOn(), serviceOn("smbd"), serviceOn("syncthing"), serviceOn("systemd-timesyncd")
+		n.fan = readFanProfile()
 		n.timezone, n.storage, n.version, n.kernel = readTimezone(), storageFree(), osVersion(), kernel()
 	}
 	l.win.Update(func() {
 		o := l.s
 		if !full {
-			n.bt, n.btDevs, n.sinks, n.fan, n.ssh, n.samba, n.syncthing, n.timesync = o.bt, o.btDevs, o.sinks, o.fan, o.ssh, o.samba, o.syncthing, o.timesync
+			n.btDevs, n.sinks, n.fan = o.btDevs, o.sinks, o.fan
 			n.timezone, n.storage, n.version, n.kernel = o.timezone, o.storage, o.version, o.kernel
 		}
 		if !full || o.wifiScanning {
@@ -83,6 +84,7 @@ const (
 
 type row struct {
 	kind         rowKind
+	key          string // what the selection follows when rows move (a device's address); the label when empty
 	label, value string
 	on           bool
 	detail       string // a second line under the label
@@ -93,6 +95,13 @@ type row struct {
 	slider       *float64
 	set          func(v int)
 	danger       bool
+}
+
+func (r row) id() string {
+	if r.key != "" {
+		return r.key
+	}
+	return r.label
 }
 
 type category struct {
@@ -173,7 +182,7 @@ var categories = []category{
 			if d.connected {
 				st = "已连接"
 			}
-			rs = append(rs, row{kind: kAction, label: d.name, value: st, act: func() { l.do("连接 "+d.name, func() string { toggleBtDevice(d); return "" }) },
+			rs = append(rs, row{kind: kAction, key: d.mac, label: d.name, value: st, act: func() { l.do("连接 "+d.name, func() string { toggleBtDevice(d); return "" }) },
 				alt: func() { l.do("忘记 "+d.name, func() string { return forgetBluetooth(d) }) }, altLabel: "忘记"})
 		}
 		if len(s.btDevs) == 0 {
@@ -185,7 +194,7 @@ var categories = []category{
 		}
 		rs = append(rs, header("附近的设备"), row{kind: kAction, label: "扫描", value: scan, act: l.scanBluetooth})
 		for _, d := range s.btFound {
-			rs = append(rs, row{kind: kAction, label: d.name, value: "配对", act: func() { l.do("配对 "+d.name, func() string { return pairBluetooth(d) }) }})
+			rs = append(rs, row{kind: kAction, key: d.mac, label: d.name, value: "配对", act: func() { l.do("配对 "+d.name, func() string { return pairBluetooth(d) }) }})
 		}
 		return rs
 	}},

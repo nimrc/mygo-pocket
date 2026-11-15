@@ -70,6 +70,7 @@ type launcher struct {
 	card    int
 	cat     int
 	sel     int
+	selKey  string // the selected row's label: rows of a list that changes (networks, devices) move, and the selection follows its row
 	running string // the game playing, "" when none
 	playing atomic.Bool
 	busy    string // an action in progress
@@ -127,6 +128,25 @@ func (l *launcher) launch(g game) {
 	}()
 }
 
+// anchor keeps the selection on the row it was on when the rows changed under it, then remembers that row's label
+func (l *launcher) anchor(rows []row) []row {
+	if len(rows) == 0 {
+		l.sel, l.selKey = 0, ""
+		return rows
+	}
+	l.sel = clamp(l.sel, 0, len(rows)-1)
+	if l.selKey != "" && rows[l.sel].id() != l.selKey {
+		for i, r := range rows {
+			if r.kind != kHeader && r.id() == l.selKey {
+				l.sel = i
+				break
+			}
+		}
+	}
+	l.selKey = rows[l.sel].id()
+	return rows
+}
+
 // press is every button press, from the gamepad or NX2L_CTL, on the main thread
 func (l *launcher) press(b button) {
 	if l.running != "" {
@@ -159,27 +179,33 @@ func (l *launcher) press(b button) {
 	case fCategories:
 		switch b {
 		case bUp:
-			l.cat, l.sel = (l.cat+len(categories)-1)%len(categories), 0
+			l.cat, l.sel, l.selKey = (l.cat+len(categories)-1)%len(categories), 0, ""
 		case bDown:
-			l.cat, l.sel = (l.cat+1)%len(categories), 0
+			l.cat, l.sel, l.selKey = (l.cat+1)%len(categories), 0, ""
 		case bRight, bA:
-			l.focus, l.sel = fRows, 0
+			l.focus, l.sel, l.selKey = fRows, 0, ""
 		case bB:
 			l.focus = fGames
 		}
 	case fRows:
-		rows := categories[l.cat].rows(l)
+		rows := l.anchor(categories[l.cat].rows(l))
 		if len(rows) == 0 {
 			l.focus = fCategories
 			return
 		}
-		l.sel = clamp(l.sel, 0, len(rows)-1)
 		r := rows[l.sel]
+		defer func() { l.selKey = ""; l.anchor(categories[l.cat].rows(l)) }() // the row the press moved to
 		switch b {
-		case bUp:
-			l.sel = (l.sel + len(rows) - 1) % len(rows)
-		case bDown:
-			l.sel = (l.sel + 1) % len(rows)
+		case bUp, bDown: // to the next row there is, over the section titles
+			d := 1
+			if b == bUp {
+				d = len(rows) - 1
+			}
+			for k := 0; k < len(rows); k++ {
+				if l.sel = (l.sel + d) % len(rows); rows[l.sel].kind != kHeader {
+					break
+				}
+			}
 		case bLeft, bRight:
 			d := 1
 			if b == bLeft {
@@ -275,7 +301,7 @@ func (l *launcher) find(cat, text string) {
 		}
 		for j, r := range k.rows(l) {
 			if r.kind != kHeader && (strings.Contains(r.label, text) || strings.Contains(r.value, text)) {
-				l.cat, l.focus, l.sel = i, fRows, j
+				l.cat, l.focus, l.sel, l.selKey = i, fRows, j, r.id()
 				return
 			}
 		}

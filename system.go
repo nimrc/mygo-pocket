@@ -215,7 +215,11 @@ func setBluetooth(on bool) {
 
 func btList(filter string) map[string]string {
 	out := map[string]string{}
-	for _, line := range strings.Split(run(4*time.Second, "bluetoothctl", "--timeout", "2", "devices", filter), "\n") {
+	args := []string{"--timeout", "2", "devices"}
+	if filter != "" { // an empty filter argument lists nothing
+		args = append(args, filter)
+	}
+	for _, line := range strings.Split(run(4*time.Second, "bluetoothctl", args...), "\n") {
 		f := strings.SplitN(line, " ", 3) // Device <mac> <name>
 		if len(f) == 3 && f[0] == "Device" {
 			out[f[1]] = f[2]

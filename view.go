@@ -154,6 +154,9 @@ func (l *launcher) gamesView(c *ui.Context) {
 func (l *launcher) settingsView(c *ui.Context) {
 	cat := categories[l.cat]
 	rows := cat.rows(l)
+	if l.focus == fRows {
+		rows = l.anchor(rows)
+	}
 	ui.Row(c).Grow(1).Gap(28).AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Width(300).Padding(14).Radius(24).Background(cPanel).Gap(6).Children(func() {
 			for i, k := range categories {
@@ -164,7 +167,7 @@ func (l *launcher) settingsView(c *ui.Context) {
 					ui.Text(c, k.name).FontSize(26).TextColor(pick(sel && l.focus == fCategories, cBg, pick(sel, cText, cMuted)))
 				})
 				if item.Clicked() {
-					l.cat, l.sel, l.focus = i, 0, fCategories
+					l.cat, l.sel, l.selKey, l.focus = i, 0, "", fCategories
 				}
 			}
 		})
@@ -201,18 +204,18 @@ func (l *launcher) rowView(c *ui.Context, r row, i int) {
 		case kChoice:
 			ui.Row(c).AlignItems(ui.Center).Gap(14).Children(func() {
 				if ui.Text(c, "‹").FontSize(30).TextColor(pick(sel, cAccent, cFaint)).Padding(6).Clicked() {
-					l.sel = i
+					l.sel, l.selKey = i, r.id()
 					r.adjust(-1)
 				}
 				ui.Text(c, r.value).FontSize(24).TextColor(cText).Width(220).TextAlign(ui.Center)
 				if ui.Text(c, "›").FontSize(30).TextColor(pick(sel, cAccent, cFaint)).Padding(6).Clicked() {
-					l.sel = i
+					l.sel, l.selKey = i, r.id()
 					r.adjust(1)
 				}
 			})
 		case kSlider:
 			if ui.Slider(c, r.slider, 0, 100).Width(560).Changed() {
-				l.sel = i
+				l.sel, l.selKey = i, r.id()
 				r.set(int(*r.slider + 0.5))
 			}
 			ui.Text(c, r.value).FontSize(24).TextColor(cText).Width(80).TextAlign(ui.End)
@@ -225,7 +228,7 @@ func (l *launcher) rowView(c *ui.Context, r row, i int) {
 		el.ScrollIntoView()
 	}
 	if el.Clicked() {
-		l.sel, l.focus = i, fRows
+		l.sel, l.selKey, l.focus = i, r.id(), fRows
 		if r.act != nil {
 			r.act()
 		}
