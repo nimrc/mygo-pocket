@@ -203,7 +203,7 @@ var categories = []category{
 		return []row{
 			{kind: kSlider, label: "亮度", value: fmt.Sprintf("%d%%", s.brightness), slider: &l.slideBrightness,
 				adjust: func(d int) { l.setBrightness(s.brightness + d*5) }, set: l.setBrightness},
-			choice("界面缩放", fmt.Sprintf("%.2gx", l.zoom), func(d int) {
+			choice("界面缩放", fmt.Sprintf("%gx", l.zoom), func(d int) {
 				i := 0
 				for j, z := range zooms {
 					if z == l.zoom {
