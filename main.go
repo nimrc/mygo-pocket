@@ -7,7 +7,7 @@
 // launcher reads no input while it runs.
 //
 // MYGO_POCKET_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
-// "find <category> <label>" and "type <text>" (the open keyboard), for testing on the device with screenshots.
+// "find <category> <label>", "game <id>" (chooses that card) and "type <text>" (the open keyboard), for testing on the device with screenshots.
 package main
 
 import (
@@ -350,6 +350,14 @@ func (l *launcher) control(path string) {
 				l.win.Update(func() { l.press(b) })
 			} else if cat, label, ok := strings.Cut(strings.TrimPrefix(line, "find "), " "); ok && strings.HasPrefix(line, "find ") {
 				l.win.Update(func() { l.find(cat, label) })
+			} else if id, ok := strings.CutPrefix(line, "game "); ok {
+				l.win.Update(func() {
+					for i, g := range l.games {
+						if g.id == id {
+							l.focus, l.card, l.editing = fGames, i, false
+						}
+					}
+				})
 			} else if text, ok := strings.CutPrefix(line, "type "); ok {
 				l.win.Update(func() {
 					if k, ok := l.modal.(*keyboard); ok {

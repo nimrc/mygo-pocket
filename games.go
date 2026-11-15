@@ -113,6 +113,9 @@ func readGame(root, dir string) (game, bool) {
 		if !hasP {
 			return fail("an nx2linux card needs nx2a-data.json")
 		}
+		if !exists(filepath.Join(dir, "dmhost")) { // a pack still being copied in
+			return fail("no dmhost yet")
+		}
 		g.title = cmp(g.title, p.Name)
 		if g.sub == "" && g.title != p.Name {
 			g.sub = p.Name

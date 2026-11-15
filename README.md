@@ -37,7 +37,7 @@ name is the card's id. The launcher rescans every 30 s, so a copied directory sh
 
 | `kind` | What runs | Required |
 | --- | --- | --- |
-| `nx2linux` | A Switch port: `launch.sh` at the root runs the pack's `dmhost`. This kind is the default when `nx2a-data.json` is present. | — |
+| `nx2linux` | A Switch port: `launch.sh` at the root runs the pack's `dmhost`. This kind is the default when `nx2a-data.json` is present; the card shows once `dmhost` is in place, so a pack being copied in is not a card yet. | — |
 | `mygo` | A MyGo app in the directory; `exec[0]` is relative to it. | `title`, `exec` |
 | `native` | Any other program in the directory (an SDL game, a script). | `title`, `exec` |
 | `command` | A program on `PATH`, such as `retroarch`. | `title`, `exec` |
@@ -101,6 +101,7 @@ A game runs as a child process, fullscreen above the launcher. The launcher read
 
 - A button name: `up`, `down`, `left`, `right`, `a`, `b`, `x`, `l`, `r`, `start`, `back`.
 - `find <category> <label>`: selects a settings row.
+- `game <id>`: chooses a card on the games screen (then `a` starts it).
 - `type <text>`: types into the open keyboard.
 
 Combined with `grim` for screenshots, this drives every screen over SSH. `MYGO_POCKET_PPROF=<file>` writes a CPU profile of the first
