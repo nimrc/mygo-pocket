@@ -332,7 +332,22 @@ func joinWifi(ssid, password string) string {
 		return "已连接 " + ssid
 	}
 	run(10*time.Second, "nmcli", "con", "delete", "id", ssid)
-	return "连接失败：" + firstLine(out)
+	return "连接 " + ssid + " 失败：" + wifiError(out)
+}
+
+// wifiError says why nmcli could not join, in the launcher's words
+func wifiError(out string) string {
+	switch o := strings.ToLower(out); {
+	case strings.Contains(o, "secrets were required"), strings.Contains(o, "psk"), strings.Contains(o, "authentication"), strings.Contains(o, "password"):
+		return "密码错误"
+	case strings.Contains(o, "no network with ssid"):
+		return "找不到这个网络，请重新扫描"
+	case strings.Contains(o, "timeout"), strings.Contains(o, "timed out"):
+		return "连接超时"
+	case out == "":
+		return "没有响应"
+	}
+	return firstLine(out)
 }
 
 func forgetWifi(ssid string) string { return run(10*time.Second, "nmcli", "con", "delete", "id", ssid) }

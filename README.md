@@ -21,6 +21,10 @@ freedreno) in a sway session of its own, started at boot by `nx2l-launcher.servi
 
 Settings go through ROCKNIX's `get_setting`/`set_setting`, so they hold across reboots as ROCKNIX applies them.
 
+EmulationStation is gone from the boot path: `launcherctl enable` masks `emustation.service` and gives `essway.service` a drop-in whose
+condition never holds (ROCKNIX's `111-sway-init` unmasks essway at every boot; drop-ins survive it). `/usr` is read-only, so this is how ES is
+removed; `launcherctl disable` restores ROCKNIX's defaults. There is no switch back to ES in the launcher.
+
 ## Controls
 
 The built-in gamepad reaches the launcher as InputPlumber's virtual DualSense (InputPlumber hides `/dev/input/event6` and exposes a DS5

@@ -96,8 +96,8 @@ func (l *launcher) do(what string, f func() string) {
 	go func() {
 		out := f()
 		log.Printf("%s: %s", what, firstLine(out))
+		l.win.Update(func() { l.busy = ""; l.say(firstLine(out)) }) // the outcome at once; reading the whole state again takes seconds
 		l.refresh(true)
-		l.win.Update(func() { l.busy = ""; l.say(firstLine(out)) })
 	}()
 }
 
