@@ -54,7 +54,8 @@ func (l *launcher) view(c *ui.Context) {
 	} else if l.note != "" {
 		c.After(time.Second)
 	}
-	t := *c.Theme().WithAccent(cPrimary)
+	// dark whatever the system says: ROCKNIX's desktop has no colour scheme, so the theme was light and the glass lightened what it frosts
+	t := *ui.DarkTheme().WithAccent(cPrimary)
 	c.SetTheme(&t)
 	l.slideBrightness, l.slideVolume = float64(l.s.brightness), float64(l.s.volume)
 	w, h := c.Size()
