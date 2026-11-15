@@ -182,7 +182,7 @@ var categories = []category{
 			if d.connected {
 				st = "已连接"
 			}
-			rs = append(rs, row{kind: kAction, key: d.mac, label: d.name, value: st, act: func() { l.do("连接 "+d.name, func() string { toggleBtDevice(d); return "" }) },
+			rs = append(rs, row{kind: kAction, key: d.mac, label: d.name, value: st, act: func() { l.do("连接 "+d.name, func() string { return toggleBtDevice(d) }) },
 				alt: func() { l.do("忘记 "+d.name, func() string { return forgetBluetooth(d) }) }, altLabel: "忘记"})
 		}
 		if len(s.btDevs) == 0 {

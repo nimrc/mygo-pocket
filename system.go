@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,12 +17,14 @@ import (
 	"time"
 )
 
+var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]|\x01|\x02`) // bluetoothctl colours its output and wraps it in readline markers
+
 // run runs a command with a deadline and returns its trimmed output (bluetoothctl can block for good without its daemon).
 func run(timeout time.Duration, name string, args ...string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	out, _ := exec.CommandContext(ctx, name, args...).CombinedOutput()
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(ansi.ReplaceAllString(string(out), ""))
 }
 
 func shell(timeout time.Duration, script string) string { return run(timeout, "bash", "-c", script) }
@@ -238,12 +241,31 @@ func readBtDevices() []btDevice {
 	return ds
 }
 
-func toggleBtDevice(d btDevice) {
+// btInfo reads a device's yes/no fields from bluetoothctl info ("Paired", "Connected", ...)
+func btInfo(mac string) map[string]bool {
+	out := map[string]bool{}
+	for _, line := range strings.Split(run(5*time.Second, "bluetoothctl", "--timeout", "3", "info", mac), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), ": "); ok && (v == "yes" || v == "no") {
+			out[k] = v == "yes"
+		}
+	}
+	return out
+}
+
+// toggleBtDevice connects a paired device or disconnects it, and says which it did
+func toggleBtDevice(d btDevice) string {
 	if d.connected {
 		run(10*time.Second, "bluetoothctl", "--timeout", "8", "disconnect", d.mac)
-	} else {
-		run(15*time.Second, "rocknix-bluetooth", "connect", d.mac)
+		if !btInfo(d.mac)["Connected"] {
+			return "已断开 " + d.name
+		}
+		return "断开 " + d.name + " 失败"
 	}
+	run(15*time.Second, "rocknix-bluetooth", "connect", d.mac)
+	if btInfo(d.mac)["Connected"] {
+		return "已连接 " + d.name
+	}
+	return "连接 " + d.name + " 失败：设备没有响应"
 }
 
 // ---- fan (ROCKNIX's fancontrol sets the thermal zones' trip points for a profile and exits) ----
@@ -381,15 +403,26 @@ func scanBluetooth() []btDevice {
 	return ds
 }
 
+// pairBluetooth pairs, trusts (so it reconnects by itself) and connects a device, and says how far it got
 func pairBluetooth(d btDevice) string {
-	out := run(30*time.Second, "bluetoothctl", "--timeout", "25", "pair", d.mac)
+	run(30*time.Second, "bluetoothctl", "--timeout", "25", "pair", d.mac)
+	if !btInfo(d.mac)["Paired"] {
+		return "配对 " + d.name + " 失败：请让设备进入配对模式后重试"
+	}
 	run(5*time.Second, "bluetoothctl", "--timeout", "3", "trust", d.mac)
 	run(15*time.Second, "bluetoothctl", "--timeout", "10", "connect", d.mac)
-	return out
+	if btInfo(d.mac)["Connected"] {
+		return "已配对并连接 " + d.name
+	}
+	return "已配对 " + d.name + "（未连接）"
 }
 
 func forgetBluetooth(d btDevice) string {
-	return run(10*time.Second, "bluetoothctl", "--timeout", "5", "remove", d.mac)
+	run(10*time.Second, "bluetoothctl", "--timeout", "5", "remove", d.mac)
+	if btList("Paired")[d.mac] == "" {
+		return "已忘记 " + d.name
+	}
+	return "忘记 " + d.name + " 失败"
 }
 
 // ---- audio output: the speaker or the headphones (ROCKNIX's audio.device) ----

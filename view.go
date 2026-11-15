@@ -132,11 +132,11 @@ func (l *launcher) gamesView(c *ui.Context) {
 	ui.Row(c).Grow(1).AlignItems(ui.Center).Justify(ui.Center).Gap(36).Children(func() {
 		for i, g := range games {
 			sel := i == l.card
-			card := ui.Column(c).Width(540).Height(pick[float32](sel, 380, 340)).Radius(28).Padding(34).Gap(8).Justify(ui.End).
+			card := ui.Column(c).Width(410).Height(pick[float32](sel, 380, 340)).Radius(28).Padding(34).Gap(8).Justify(ui.End).
 				Gradient(g.from, g.to, 160).Border(pick[float32](sel, 4, 0), cText).Opacity(pick[float32](sel, 1, 0.72)).Children(func() {
 				ui.Text(c, g.tag).FontSize(17).Bold().TextColor(ui.RGBA(255, 255, 255, 0.6))
 				ui.Box(c).Grow(1)
-				ui.Text(c, g.title).FontSize(42).Bold().TextColor(cText)
+				ui.Text(c, g.title).FontSize(36).Bold().TextColor(cText)
 				ui.Text(c, g.sub).FontSize(22).TextColor(ui.RGBA(255, 255, 255, 0.7))
 			})
 			if card.Clicked() {

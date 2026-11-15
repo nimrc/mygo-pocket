@@ -34,6 +34,7 @@ type game struct {
 var games = []game{
 	{"silksong", "空洞骑士：丝之歌", "Hollow Knight: Silksong", "SWITCH · NX2LINUX", ui.Hex("#9f1239"), ui.Hex("#1c0710"), "DATA=/storage/nx2linux/silksong /storage/nx2linux/launch.sh"},
 	{"hollowknight", "空洞骑士", "Hollow Knight", "SWITCH · NX2LINUX", ui.Hex("#1d4ed8"), ui.Hex("#0a1022"), "DATA=/storage/nx2linux/hollowknight /storage/nx2linux/launch.sh"},
+	{"hades2", "哈迪斯 II", "Hades II", "SWITCH · NX2LINUX", ui.Hex("#b45309"), ui.Hex("#1f0d03"), "DATA=/storage/nx2linux/hades2 /storage/nx2linux/launch.sh"},
 	{"retroarch", "RetroArch", "模拟器", "RETRO", ui.Hex("#6d28d9"), ui.Hex("#120a24"), "retroarch"},
 }
 
@@ -73,6 +74,7 @@ type launcher struct {
 	selKey  string // the selected row's label: rows of a list that changes (networks, devices) move, and the selection follows its row
 	running string // the game playing, "" when none
 	playing atomic.Bool
+	behind  atomic.Bool // another window is in front (a game started outside the launcher): its presses are not the launcher's
 	busy    string // an action in progress
 	note    string // the last action's outcome, shown for a few seconds
 	noteAt  time.Time
@@ -98,11 +100,17 @@ func (l *launcher) do(what string, f func() string) {
 		out := f()
 		log.Printf("%s: %s", what, firstLine(out))
 		l.win.Update(func() { l.busy = ""; l.say(firstLine(out)) }) // the outcome at once; reading the whole state again takes seconds
-		w, nets := readWifi(), cachedWifi()                          // the network first: an action on it changed what the list shows
+		w, nets := readWifi(), cachedWifi() // the lists an action changes first: the whole state takes seconds
+		bt := bluetoothOn()
+		var devs []btDevice
+		if bt {
+			devs = readBtDevices()
+		}
 		l.win.Update(func() {
 			if !l.s.wifiScanning {
 				l.s.wifi, l.s.nets = w, markInUse(nets, w.ssid)
 			}
+			l.s.bt, l.s.btDevs = bt, devs
 		})
 		l.refresh(true)
 	}()
@@ -239,6 +247,7 @@ func (l *launcher) press(b button) {
 func (l *launcher) input() {
 	var last gamepad.State
 	held := map[gamepad.Button]time.Time{}
+	wait := false
 	repeat := func(s gamepad.State, b gamepad.Button) bool {
 		if !s.Pressed(b) {
 			delete(held, b)
@@ -265,9 +274,16 @@ func (l *launcher) input() {
 				s.Buttons[i] = max(s.Buttons[i], ps.Buttons[i])
 			}
 		}
-		if l.playing.Load() {
-			last, held = s, map[gamepad.Button]time.Time{}
+		if l.playing.Load() || l.behind.Load() {
+			last, held, wait = s, map[gamepad.Button]time.Time{}, true
 			continue
+		}
+		if wait { // back in front: nothing until every button the game held is up
+			if anyPressed(s) {
+				last = s
+				continue
+			}
+			wait = false
 		}
 		var bs []button
 		for b, gb := range map[button]gamepad.Button{bUp: gamepad.Up, bDown: gamepad.Down, bLeft: gamepad.Left, bRight: gamepad.Right} {
@@ -345,6 +361,8 @@ func main() {
 	l := &launcher{}
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
+		l.win.OnBlur(func() { l.behind.Store(true) })
+		l.win.OnFocus(func() { l.behind.Store(false) })
 		go l.refresh(true)
 		go l.input()
 		if p := os.Getenv("NX2L_CTL"); p != "" {
@@ -362,4 +380,14 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// anyPressed tells whether a button is held (a trigger past its press point counts; its noise at rest does not)
+func anyPressed(s gamepad.State) bool {
+	for i := range s.Buttons {
+		if s.Pressed(gamepad.Button(i)) {
+			return true
+		}
+	}
+	return false
 }
