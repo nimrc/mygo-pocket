@@ -144,6 +144,15 @@ func setWifi(on bool) {
 func scanWifi() []wifiNet { return wifiList("yes", 15*time.Second) }
 func cachedWifi() []wifiNet { return wifiList("no", 3*time.Second) }
 
+// markInUse marks the network wlan0 is on: nmcli's list keeps its IN-USE mark from its last scan, after a connection changed
+func markInUse(nets []wifiNet, ssid string) []wifiNet {
+	for i := range nets {
+		nets[i].inUse = ssid != "" && nets[i].ssid == ssid
+	}
+	sort.SliceStable(nets, func(i, j int) bool { return nets[i].inUse && !nets[j].inUse })
+	return nets
+}
+
 func wifiList(rescan string, timeout time.Duration) []wifiNet {
 	saved := map[string]bool{}
 	for _, line := range strings.Split(run(3*time.Second, "nmcli", "-t", "-f", "NAME,TYPE", "con", "show"), "\n") {

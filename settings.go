@@ -45,7 +45,7 @@ func (l *launcher) refresh(full bool) {
 			n.btDevs = readBtDevices()
 		}
 		n.sinks = readSinks()
-		n.nets = cachedWifi()
+		n.nets = markInUse(cachedWifi(), n.wifi.ssid)
 		n.fan, n.ssh, n.samba, n.syncthing, n.timesync = readFanProfile(), sshOn(), serviceOn("smbd"), serviceOn("syncthing"), serviceOn("systemd-timesyncd")
 		n.timezone, n.storage, n.version, n.kernel = readTimezone(), storageFree(), osVersion(), kernel()
 	}
