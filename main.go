@@ -58,6 +58,7 @@ type launcher struct {
 	games   []game
 	focus   focus
 	card    int
+	editing bool // left/right change the chosen row's value (A on a choice or a slider) until A or B
 	cat     int
 	sel     int
 	selKey  string // the selected row's label: rows of a list that changes (networks, devices) move, and the selection follows its row
@@ -155,7 +156,11 @@ func (l *launcher) press(b button) {
 		l.modal.press(l, b)
 		return
 	}
+	if l.focus != fRows {
+		l.editing = false
+	}
 	if b == bL || b == bR {
+		l.editing = false
 		if l.focus == fGames {
 			l.focus = fCategories
 		} else {
@@ -201,6 +206,18 @@ func (l *launcher) press(b button) {
 		}
 		r := rows[l.sel]
 		defer func() { l.selKey = ""; l.anchor(categories[l.cat].rows(l)) }() // the row the press moved to
+		if l.editing && r.adjust != nil { // A chose this value to change: left/right change it, A or B is done
+			switch b {
+			case bLeft:
+				r.adjust(-1)
+			case bRight:
+				r.adjust(1)
+			case bA, bB:
+				l.editing = false
+			}
+			return
+		}
+		l.editing = false
 		switch b {
 		case bUp, bDown: // to the next row there is, over the section titles
 			d := 1
@@ -212,28 +229,18 @@ func (l *launcher) press(b button) {
 					break
 				}
 			}
-		case bLeft, bRight:
-			d := 1
-			if b == bLeft {
-				d = -1
-			}
-			if r.adjust != nil {
-				r.adjust(d)
-			} else if b == bLeft {
-				l.focus = fCategories
-			}
+		case bLeft, bB: // left is always back: a value changes only after A
+			l.focus = fCategories
 		case bA:
 			if r.act != nil {
 				r.act()
 			} else if r.adjust != nil {
-				r.adjust(1)
+				l.editing = true
 			}
 		case bX:
 			if r.alt != nil {
 				r.alt()
 			}
-		case bB:
-			l.focus = fCategories
 		}
 	}
 }

@@ -88,8 +88,9 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 - **Games**: left/right choose a card, A starts it.
 - **Settings**:
   - Up/down choose a category; right or A enters it.
-  - Up/down choose a row; left/right change its value.
-  - A acts on the row, X does its second action (forget, for example), B goes back.
+  - Up/down choose a row. A acts on it, X does its second action (forget, for example), and left or B goes back.
+  - A value (a choice or a slider) changes only after A: the row lights up, left/right change the value, and A or B is done. So left
+    never changes a value by mistake when it was meant as back.
 - **On-screen keyboard**: the d-pad and A type, X shifts, B erases, + accepts, − cancels.
 
 A game runs as a child process, fullscreen above the launcher. The launcher reads no input until the game exits.

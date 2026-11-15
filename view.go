@@ -302,7 +302,12 @@ func (l *launcher) settingsView(c *ui.Context, w float32) {
 
 func (l *launcher) rowView(c *ui.Context, r row, i int, sliderW float32) {
 	sel := l.focus == fRows && i == l.sel
-	el := ui.Row(c).AlignItems(ui.Center).Gap(12).PaddingX(15).PaddingY(12).Radius(16).Background(pick(sel, cSelRow, ui.Transparent)).Children(func() {
+	editing := sel && l.editing
+	el := ui.Row(c).AlignItems(ui.Center).Gap(12).PaddingX(15).PaddingY(12).Radius(16).Background(pick(editing, cPrimary.Alpha(0.22), pick(sel, cSelRow, ui.Transparent)))
+	if editing {
+		el.Border(1.5, cPrimary.Alpha(0.8))
+	}
+	el.Children(func() {
 		if sel {
 			ui.Box(c).Width(3).Height(22).Radius(1.5).Background(cPrimary)
 		}
@@ -319,12 +324,12 @@ func (l *launcher) rowView(c *ui.Context, r row, i int, sliderW float32) {
 			switchView(c, r.on)
 		case kChoice:
 			ui.Row(c).AlignItems(ui.Center).Gap(6).Children(func() {
-				if ui.Text(c, "‹").FontSize(22).TextColor(pick(sel, cPrimary, cSummary)).PaddingX(6).Clicked() {
+				if ui.Text(c, "‹").FontSize(22).TextColor(pick(editing, cPrimary, cSummary)).PaddingX(6).Clicked() {
 					l.sel, l.selKey = i, r.id()
 					r.adjust(-1)
 				}
 				ui.Text(c, r.value).FontSize(16).TextColor(cText).Width(160).TextAlign(ui.Center)
-				if ui.Text(c, "›").FontSize(22).TextColor(pick(sel, cPrimary, cSummary)).PaddingX(6).Clicked() {
+				if ui.Text(c, "›").FontSize(22).TextColor(pick(editing, cPrimary, cSummary)).PaddingX(6).Clicked() {
 					l.sel, l.selKey = i, r.id()
 					r.adjust(1)
 				}
@@ -346,7 +351,7 @@ func (l *launcher) rowView(c *ui.Context, r row, i int, sliderW float32) {
 		el.ScrollIntoView()
 	}
 	if el.Clicked() {
-		l.sel, l.selKey, l.focus = i, r.id(), fRows
+		l.sel, l.selKey, l.focus, l.editing = i, r.id(), fRows, false
 		if r.act != nil {
 			r.act()
 		}
@@ -376,8 +381,13 @@ func (l *launcher) footer(c *ui.Context) {
 		hint = "←→ 选择    A 开始    L/R 设置"
 	case l.focus == fCategories:
 		hint = "↑↓ 分类    → / A 进入    B 游戏    L/R 游戏"
+	case l.editing:
+		hint = "←→ 调节    A / B 完成"
 	default:
-		hint = "↑↓ 选择    ←→ 调节    A 确认    B 返回"
+		hint = "↑↓ 选择    A 确认    ← / B 返回"
+		if rows := categories[l.cat].rows(l); l.sel < len(rows) && rows[l.sel].adjust != nil && rows[l.sel].act == nil {
+			hint = "↑↓ 选择    A 修改    ← / B 返回"
+		}
 		if rows := categories[l.cat].rows(l); l.sel < len(rows) && rows[l.sel].alt != nil {
 			hint += "    X " + rows[l.sel].altLabel
 		}
