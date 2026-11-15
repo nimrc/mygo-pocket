@@ -186,8 +186,10 @@ func (l *launcher) gamesView(c *ui.Context, w float32) {
 				card.Border(1.5, ui.RGBA(255, 255, 255, 0.55)).Shadow(0, 14, 44, 0, g.from.Alpha(0.6))
 			}
 			card.Opacity(pick[float32](sel, 1, 0.82)).Children(func() {
-				pane(ui.Box(c).PaddingX(9).PaddingY(4), 10, ui.Transparent, 0).Children(func() {
-					ui.Text(c, g.tag).FontSize(11).Bold().TextColor(cText)
+				ui.Row(c).Children(func() { // the tag hugs its text
+					pane(ui.Box(c).PaddingX(9).PaddingY(4), 10, ui.Transparent, 0).Children(func() {
+						ui.Text(c, g.tag).FontSize(11).Bold().TextColor(cText)
+					})
 				})
 				ui.Box(c).Grow(1)
 				ui.Text(c, g.title).FontSize(25).Bold().TextColor(cWhite)
