@@ -47,4 +47,4 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o nx2l-launcher .
 Device folder `/storage/nx2linux/launcher`: `nx2l-launcher`, `session.sh`, `sway-launcher.conf`, `nx2l-launcher.service`, `launcherctl`.
 Logs: `launcher.log`, `sway.log`.
 
-Idle at the games screen: the launcher and sway together about 135 MB RSS (EmulationStation and sway: 217 MB).
+Idle at the games screen: the launcher and sway together 151 MB RSS and 2% of one core (EmulationStation and sway: 217 MB, 7.8%).
