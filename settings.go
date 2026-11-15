@@ -50,7 +50,14 @@ func (l *launcher) refresh(full bool) {
 		n.fan = readFanProfile()
 		n.timezone, n.storage, n.version, n.kernel = readTimezone(), storageFree(), osVersion(), kernel()
 	}
+	var gs []game
+	if full {
+		gs = scanGames()
+	}
 	l.win.Update(func() {
+		if full {
+			l.setGames(gs)
+		}
 		o := l.s
 		if !full {
 			n.btDevs, n.sinks, n.fan = o.btDevs, o.sinks, o.fan

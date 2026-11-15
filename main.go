@@ -1,5 +1,5 @@
 // nx2l launcher: the Retroid Pocket Flip 2's home screen on ROCKNIX. A fullscreen MyGo window in a sway session of its own (session.sh,
-// sway-launcher.conf): the games (nx2linux ports and RetroArch) and the handheld's settings through ROCKNIX's tools (system.go).
+// sway-launcher.conf): the games found under $NX2L_GAMES (games.go) and the handheld's settings through ROCKNIX's tools (system.go).
 //
 // Gamepad: L/R switch between Games and Settings. Games: left/right choose, A starts. Settings: the category list on the left (up/down,
 // right or A enters it), its rows on the right (up/down choose, left/right change, A does, X the row's second action, B back). Touch: a tap
@@ -15,7 +15,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime/pprof"
 	"strings"
 	"sync/atomic"
@@ -26,41 +25,6 @@ import (
 	"github.com/egoist/mygo/plugins/game/gamepad"
 	"github.com/egoist/mygo/ui"
 )
-
-type game struct {
-	id, title, sub, tag string
-	from, to             ui.Color
-	cmd                  string
-}
-
-// covers are the games' posters by id: art/<id>.jpg beside the launcher (Steam's library capsules, fetch-art.sh)
-var covers = map[string]*ui.Bitmap{}
-
-// loadCovers reads each game's cover from art/ beside the executable. The covers are the games' Steam art, kept on the device, not in git
-func loadCovers() {
-	dir := "art"
-	if exe, err := os.Executable(); err == nil {
-		dir = filepath.Join(filepath.Dir(exe), "art")
-	}
-	for i := range games {
-		data, err := os.ReadFile(filepath.Join(dir, games[i].id+".jpg"))
-		if err != nil {
-			continue
-		}
-		if b, err := ui.DecodeBitmap(data); err == nil {
-			covers[games[i].id] = b
-		} else {
-			log.Printf("cover %s: %v", games[i].id, err)
-		}
-	}
-}
-
-var games = []game{
-	{"silksong", "空洞骑士：丝之歌", "Hollow Knight: Silksong", "SWITCH · NX2LINUX", ui.Hex("#9f1239"), ui.Hex("#1c0710"), "DATA=/storage/nx2linux/silksong /storage/nx2linux/launch.sh"},
-	{"hollowknight", "空洞骑士", "Hollow Knight", "SWITCH · NX2LINUX", ui.Hex("#1d4ed8"), ui.Hex("#0a1022"), "DATA=/storage/nx2linux/hollowknight /storage/nx2linux/launch.sh"},
-	{"hades2", "哈迪斯 II", "Hades II", "SWITCH · NX2LINUX", ui.Hex("#b45309"), ui.Hex("#1f0d03"), "DATA=/storage/nx2linux/hades2 /storage/nx2linux/launch.sh"},
-	{"retroarch", "RetroArch", "模拟器", "RETRO", ui.Hex("#6d28d9"), ui.Hex("#120a24"), "retroarch"},
-}
 
 type button int
 
@@ -91,6 +55,7 @@ const (
 type launcher struct {
 	win     *mygo.Window
 	s       state
+	games   []game
 	focus   focus
 	card    int
 	cat     int
@@ -150,7 +115,8 @@ func (l *launcher) launch(g game) {
 	l.running, l.note = g.title, ""
 	l.playing.Store(true)
 	go func() {
-		cmd := exec.Command("bash", "-c", g.cmd)
+		cmd := exec.Command(g.argv[0], g.argv[1:]...)
+		cmd.Dir, cmd.Env = g.dir, append(os.Environ(), g.env...)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 		err := cmd.Run()
 		log.Printf("%s ended: %v", g.id, err)
@@ -199,13 +165,20 @@ func (l *launcher) press(b button) {
 	}
 	switch l.focus {
 	case fGames:
+		n := len(l.games)
 		switch b {
 		case bLeft:
-			l.card = (l.card + len(games) - 1) % len(games)
+			if n > 0 {
+				l.card = (l.card + n - 1) % n
+			}
 		case bRight:
-			l.card = (l.card + 1) % len(games)
+			if n > 0 {
+				l.card = (l.card + 1) % n
+			}
 		case bA, bStart:
-			l.launch(games[l.card])
+			if n > 0 {
+				l.launch(l.games[l.card])
+			}
 		case bDown:
 			l.focus = fCategories
 		}
@@ -388,8 +361,7 @@ func main() {
 			time.AfterFunc(20*time.Second, func() { pprof.StopCPUProfile(); f.Close(); log.Printf("profile written to %s", path) })
 		}
 	}
-	l := &launcher{zoom: readZoom()}
-	loadCovers()
+	l := &launcher{zoom: readZoom(), games: scanGames()}
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })

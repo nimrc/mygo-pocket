@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/plugins/glass"
@@ -85,8 +86,8 @@ func (l *launcher) view(c *ui.Context) {
 // to it as the choice moves
 func (l *launcher) wallpaper(c *ui.Context, w, h float32) {
 	a, b, d := ui.Hex("#2d5bff"), ui.Hex("#8b3dff"), ui.Hex("#00b3a4")
-	if l.focus == fGames {
-		a = games[l.card].from
+	if l.focus == fGames && len(l.games) > 0 {
+		a = l.games[l.card].from
 	}
 	light := func(col ui.Color, x, y, size float32, key string) {
 		blob := ui.Box(c).Absolute().Left(x).Top(y).Size(size, size)
@@ -179,13 +180,21 @@ func batteryIcon(c *ui.Context, b battery) {
 
 func (l *launcher) gamesView(c *ui.Context, w float32) {
 	const gap = 24
+	games := l.games
+	if len(games) == 0 {
+		ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Text(c, "没有游戏").FontSize(24).Bold().TextColor(cText)
+			ui.Text(c, "把游戏目录放进 "+strings.Join(gameRoots(), "、")).FontSize(15).TextColor(cSecondary)
+		})
+		return
+	}
 	cw := min(240, (w-56-gap*float32(len(games)-1))/float32(len(games)))
 	ch := cw * 1.5 // Steam's library capsules are 600x900
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(26).Children(func() {
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {
 			for i, g := range games {
 				sel := i == l.card
-				cover := covers[g.id]
+				cover := g.bmp
 				// the chosen card grows by its size, not a transform: a clip or a rounded image under a transform is masked on the CPU
 				// (MyGo's raster), which took 1.4 cores while the choice moved; axis-aligned rounded rectangles stay on the GPU
 				card := ui.Box(c).Radius(22)
