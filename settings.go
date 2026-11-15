@@ -203,6 +203,16 @@ var categories = []category{
 		return []row{
 			{kind: kSlider, label: "亮度", value: fmt.Sprintf("%d%%", s.brightness), slider: &l.slideBrightness,
 				adjust: func(d int) { l.setBrightness(s.brightness + d*5) }, set: l.setBrightness},
+			choice("界面缩放", fmt.Sprintf("%.2gx", l.zoom), func(d int) {
+				i := 0
+				for j, z := range zooms {
+					if z == l.zoom {
+						i = j
+					}
+				}
+				l.zoom = zooms[clamp(i+d, 0, len(zooms)-1)]
+				go setSetting("nx2l.ui.zoom", fmt.Sprint(l.zoom))
+			}),
 		}
 	}},
 	{"声音", "♪", func(l *launcher) []row {
@@ -364,3 +374,14 @@ func orDash(s string) string {
 }
 
 func firstLine(s string) string { f, _, _ := strings.Cut(s, "\n"); return f }
+
+// zooms are the view's zooms 界面缩放 steps through; 1.5 by default: at 1 the 1080p panel's 5.5 inches make text too small
+var zooms = []float32{1, 1.25, 1.5, 1.75, 2}
+
+func readZoom() float32 {
+	var z float32
+	if _, err := fmt.Sscan(getSetting("nx2l.ui.zoom"), &z); err != nil || z < 1 || z > 2 {
+		return 1.5
+	}
+	return z
+}

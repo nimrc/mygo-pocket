@@ -81,6 +81,7 @@ type launcher struct {
 	modal   modal // a keyboard or a confirmation over everything, nil when none
 
 	slideBrightness, slideVolume float64 // the sliders' values, following the state unless a finger moves them
+	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as nx2l.ui.zoom in ROCKNIX's settings
 }
 
 // modal takes the buttons while it is open
@@ -358,7 +359,7 @@ func (l *launcher) control(path string) {
 }
 
 func main() {
-	l := &launcher{}
+	l := &launcher{zoom: readZoom()}
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
