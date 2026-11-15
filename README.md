@@ -1,20 +1,50 @@
 # nx2l launcher (MyGo)
 
 The Retroid Pocket Flip 2's home screen on ROCKNIX, in place of EmulationStation: a fullscreen MyGo native UI window (GTK 3, GL on Mesa
-freedreno) in a sway session of its own.
+freedreno) in a sway session of its own, started at boot by `nx2l-launcher.service` (`../launcher/launcherctl enable`).
 
-- Pages: 游戏 (Silksong, Hollow Knight through `/storage/nx2linux/launch.sh`, RetroArch), 网络 (Wi-Fi on/off, current network, scan, join a
-  saved or open network), 蓝牙 (on/off through `rocknix-bluetooth`, paired devices), 显示与声音 (brightness, volume, mute), 性能与散热 (fan
-  profile through ROCKNIX's `fancontrol`, fan speed, CPU governor, temperatures), 系统 (SSH, storage, memory, version, EmulationStation,
-  reboot, power off). Settings go through ROCKNIX's `get_setting`/`set_setting`, so EmulationStation sees the same values.
-- Gamepad (MyGo's evdev plugin, every pad): L/R page, up/down row, left/right value (held: repeats), A do, B back to the games. Touch: a tap
-  does a row, − and + step a value; a finger dragging scrolls (MyGo's touch model).
-- A game runs as a child process, fullscreen above the launcher (`for_window ... fullscreen enable`); the launcher ignores the gamepad until
-  it exits.
+## Screens
 
-Files on the device (`/storage/nx2linux/launcher`): `nx2l-launcher`, `session.sh` (sway with ROCKNIX's environment), `sway-launcher.conf`,
-`nx2l-launcher.service` and `launcherctl` (../launcher). Logs: `launcher.log`, `sway.log`.
+- **Games**: one card each (Silksong and Hollow Knight through `/storage/nx2linux/launch.sh`, RetroArch). A game runs as a child process,
+  fullscreen above the launcher (`for_window ... fullscreen enable`); the launcher reads no input until it exits.
+- **Settings**: categories on the left, their rows on the right.
+
+| Category | Rows |
+| --- | --- |
+| 网络 | Wi-Fi on/off, current network and IP, scan, join (saved or open at once, secured with the on-screen keyboard), forget (X); SSH, Samba, Syncthing |
+| 蓝牙 | on/off (`rocknix-bluetooth`), paired devices (connect/disconnect, forget with X), scan and pair new devices |
+| 显示 | brightness (slider) |
+| 声音 | volume (slider), mute, output (PipeWire switches to the headphones while they are plugged in) |
+| 性能 | CPU governor (all clusters), GPU governor (devfreq), fan profile (ROCKNIX `fancontrol`); temperatures, clocks, fan speed |
+| 电源 | charge, power, voltage, current, battery temperature; reboot and power off, each confirmed |
+| 系统 | time zone (`steamos-set-timezone`), network time; IP, storage, memory, uptime, ROCKNIX version, kernel |
+
+Settings go through ROCKNIX's `get_setting`/`set_setting`, so they hold across reboots as ROCKNIX applies them.
+
+## Controls
+
+The built-in gamepad reaches the launcher as InputPlumber's virtual DualSense (InputPlumber hides `/dev/input/event6` and exposes a DS5
+and a keyboard); MyGo's evdev plugin reads every pad.
+
+- L/R: Games and Settings. Games: left/right choose, A starts.
+- Settings: up/down the categories, right or A enters; then up/down rows, left/right change a value (held: repeats), A does, X the row's
+  second action, B back.
+- On-screen keyboard: d-pad and A type, X shifts, B erases, + accepts, − cancels.
+- Touch: a tap does what A does; a finger drags a slider (the window sets `TouchPointer` from `nimrc/mygo`'s `touch-pointer` branch, which
+  `go.mod` replaces MyGo with).
+
+## Testing on the device
+
+`NX2L_CTL=/run/nx2l.ctl` (set in `sway-launcher.conf`) is a FIFO of button names (`up down left right a b x l r start back`) and
+`find <category> <label>`, which selects a row. With `grim` for screenshots, every screen and setting can be driven over SSH.
+
+## Build and deploy
 
 ```sh
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o nx2l-launcher .
 ```
+
+Device folder `/storage/nx2linux/launcher`: `nx2l-launcher`, `session.sh`, `sway-launcher.conf`, `nx2l-launcher.service`, `launcherctl`.
+Logs: `launcher.log`, `sway.log`.
+
+Idle at the games screen: the launcher and sway together about 135 MB RSS (EmulationStation and sway: 217 MB).

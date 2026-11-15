@@ -139,8 +139,12 @@ func setWifi(on bool) {
 	setSetting("wifi.enabled", flag)
 }
 
-// scanWifi lists the networks in reach, strongest first, marking the ones NetworkManager has a profile for.
-func scanWifi() []wifiNet {
+// scanWifi lists the networks in reach, strongest first, marking the ones NetworkManager has a profile for; cachedWifi lists NetworkManager's
+// last scan without a new one (fast: the full refresh reads it for the signal bars)
+func scanWifi() []wifiNet { return wifiList("yes", 15*time.Second) }
+func cachedWifi() []wifiNet { return wifiList("no", 3*time.Second) }
+
+func wifiList(rescan string, timeout time.Duration) []wifiNet {
 	saved := map[string]bool{}
 	for _, line := range strings.Split(run(3*time.Second, "nmcli", "-t", "-f", "NAME,TYPE", "con", "show"), "\n") {
 		if name, typ, ok := strings.Cut(line, ":"); ok && strings.Contains(typ, "wireless") {
@@ -149,7 +153,7 @@ func scanWifi() []wifiNet {
 	}
 	seen := map[string]bool{}
 	var nets []wifiNet
-	out := run(15*time.Second, "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes")
+	out := run(timeout, "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", rescan)
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Split(strings.ReplaceAll(line, `\:`, "\x00"), ":")
 		if len(f) < 4 || f[1] == "" {
@@ -163,7 +167,12 @@ func scanWifi() []wifiNet {
 		sig, _ := strconv.Atoi(f[2])
 		nets = append(nets, wifiNet{ssid: ssid, signal: sig, secure: f[3] != "" && f[3] != "--", inUse: f[0] == "*", saved: saved[ssid]})
 	}
-	sort.SliceStable(nets, func(i, j int) bool { return nets[i].signal > nets[j].signal })
+	sort.SliceStable(nets, func(i, j int) bool { // the one in use first, then the strongest
+		if nets[i].inUse != nets[j].inUse {
+			return nets[i].inUse
+		}
+		return nets[i].signal > nets[j].signal
+	})
 	return nets
 }
 
@@ -175,7 +184,7 @@ func connectWifi(n wifiNet) string {
 	if !n.secure {
 		return run(30*time.Second, "nmcli", "dev", "wifi", "connect", n.ssid)
 	}
-	return "需要密码：先在 EmulationStation 或用 nmcli 连接一次"
+	return "需要密码"
 }
 
 // ---- Bluetooth (ROCKNIX's rocknix-bluetooth starts and stops the daemon and its agent) ----
@@ -312,3 +321,145 @@ func osVersion() string {
 }
 
 func clamp(v, lo, hi int) int { return max(lo, min(hi, v)) }
+
+// ---- Wi-Fi: joining with a password, forgetting ----
+
+func joinWifi(ssid, password string) string {
+	return run(40*time.Second, "nmcli", "dev", "wifi", "connect", ssid, "password", password)
+}
+
+func forgetWifi(ssid string) string { return run(10*time.Second, "nmcli", "con", "delete", "id", ssid) }
+
+// ---- Bluetooth: finding and pairing new devices ----
+
+// scanBluetooth looks for devices for a few seconds and returns the ones not paired yet
+func scanBluetooth() []btDevice {
+	run(14*time.Second, "bluetoothctl", "--timeout", "10", "scan", "on")
+	paired := btList("Paired")
+	var ds []btDevice
+	for mac, name := range btList("") {
+		if paired[mac] == "" && name != strings.ReplaceAll(mac, ":", "-") {
+			ds = append(ds, btDevice{mac: mac, name: name})
+		}
+	}
+	sort.Slice(ds, func(i, j int) bool { return ds[i].name < ds[j].name })
+	return ds
+}
+
+func pairBluetooth(d btDevice) string {
+	out := run(30*time.Second, "bluetoothctl", "--timeout", "25", "pair", d.mac)
+	run(5*time.Second, "bluetoothctl", "--timeout", "3", "trust", d.mac)
+	run(15*time.Second, "bluetoothctl", "--timeout", "10", "connect", d.mac)
+	return out
+}
+
+func forgetBluetooth(d btDevice) string {
+	return run(10*time.Second, "bluetoothctl", "--timeout", "5", "remove", d.mac)
+}
+
+// ---- audio output: the speaker or the headphones (ROCKNIX's audio.device) ----
+
+type sink struct {
+	id   string
+	name string
+	def  bool
+}
+
+func readSinks() []sink {
+	var out []sink
+	in := false
+	for _, line := range strings.Split(run(3*time.Second, "wpctl", "status"), "\n") {
+		t := strings.Trim(line, " │├└─")
+		switch {
+		case strings.HasPrefix(t, "Sinks:"):
+			in = len(out) == 0 // the first Sinks list is the audio one
+		case strings.HasSuffix(t, ":"):
+			in = false
+		case in && t != "":
+			def := strings.HasPrefix(t, "*")
+			t = strings.TrimSpace(strings.TrimPrefix(t, "*"))
+			id, rest, ok := strings.Cut(t, ". ")
+			if !ok {
+				continue
+			}
+			name, _, _ := strings.Cut(rest, "[")
+			out = append(out, sink{id, strings.TrimSpace(name), def})
+		}
+	}
+	return out
+}
+
+
+// ---- GPU governor (devfreq) ----
+
+var gpuGovernors = []string{"simple_ondemand", "performance", "powersave"}
+var gpuGovernorNames = map[string]string{"simple_ondemand": "按需", "performance": "性能", "powersave": "省电"}
+
+func gpuDevfreq() string { m, _ := filepath.Glob("/sys/class/devfreq/*.gpu"); if len(m) == 0 { return "" }; return m[0] }
+func readGPUGovernor() string { return readFile(gpuDevfreq() + "/governor") }
+func setGPUGovernor(g string) { os.WriteFile(gpuDevfreq()+"/governor", []byte(g), 0) }
+func gpuFreq() int            { return readInt(gpuDevfreq()+"/cur_freq") / 1000000 }
+
+func cpuFreqs() string {
+	var parts []string
+	policies, _ := filepath.Glob("/sys/devices/system/cpu/cpufreq/policy*")
+	sort.Strings(policies)
+	for _, p := range policies {
+		parts = append(parts, strconv.Itoa(readInt(p+"/scaling_cur_freq")/1000))
+	}
+	return strings.Join(parts, " / ") + " MHz"
+}
+
+// ---- services: Samba, Syncthing, network time ----
+
+func serviceOn(name string) bool { return run(2*time.Second, "systemctl", "is-active", name) == "active" }
+
+func setService(name, settingKey string, on bool) {
+	flag, verb := "0", "stop"
+	if on {
+		flag, verb = "1", "start"
+	}
+	if settingKey != "" {
+		setSetting(settingKey, flag)
+	}
+	run(20*time.Second, "systemctl", verb, name)
+}
+
+// ---- power: battery details ----
+
+type batteryInfo struct {
+	voltage float64 // V
+	current float64 // A, positive charging
+	health  string
+	temp    float64 // °C
+}
+
+func readBatteryInfo() batteryInfo {
+	b := "/sys/class/power_supply/battery/"
+	return batteryInfo{float64(readInt(b+"voltage_now")) / 1e6, float64(readInt(b+"current_now")) / 1e6, readFile(b + "health"), float64(readInt(b+"temp")) / 10}
+}
+
+// ---- system: time zone, host, uptime ----
+
+var timezones = []string{"Asia/Shanghai", "Asia/Hong_Kong", "Asia/Taipei", "Asia/Tokyo", "Asia/Singapore", "Europe/London", "Europe/Berlin", "America/New_York", "America/Los_Angeles", "UTC"}
+
+func readTimezone() string {
+	if t := getSetting("system.timezone"); t != "" {
+		return t
+	}
+	return "UTC"
+}
+
+func setTimezone(tz string) string { return run(15*time.Second, "/usr/bin/steamos-polkit-helpers/steamos-set-timezone", tz) }
+
+func uptime() string {
+	f := strings.Fields(readFile("/proc/uptime"))
+	if len(f) == 0 {
+		return "?"
+	}
+	s, _ := strconv.ParseFloat(f[0], 64)
+	d := time.Duration(s) * time.Second
+	return fmt.Sprintf("%d 小时 %d 分", int(d.Hours()), int(d.Minutes())%60)
+}
+
+func kernel() string { return run(2*time.Second, "uname", "-r") }
