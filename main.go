@@ -69,7 +69,7 @@ type launcher struct {
 	noteAt  time.Time
 	modal   modal // a keyboard or a confirmation over everything, nil when none
 
-	slideBrightness, slideVolume float64 // the sliders' values, following the state unless a finger moves them
+	slideBrightness, slideVolume, slideLED float64 // the sliders' values, following the state unless a finger moves them
 	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as mygo-pocket.ui.zoom in ROCKNIX's settings
 }
 
@@ -368,6 +368,12 @@ func main() {
 		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
 		go l.refresh(true)
 		go l.input()
+		go func() { // the stick lights at the chosen brightness, whatever ROCKNIX's battery mode writes, game or not
+			ledLevel.Store(int32(readLEDBrightness()))
+			for range time.Tick(2 * time.Second) {
+				holdLEDBrightness(int(ledLevel.Load()))
+			}
+		}()
 		if p := os.Getenv("MYGO_POCKET_CTL"); p != "" {
 			go l.control(p)
 		}

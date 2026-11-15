@@ -19,6 +19,8 @@ Flip 2 (Snapdragon 865, ROCKNIX).
 - **System settings**:
   - Wi-Fi (scan, join with an on-screen keyboard, forget) and Bluetooth (pair, connect, forget).
   - Brightness, volume and UI zoom (1–2×, default 1.5× for 1080p).
+  - Analog stick lights: off, battery level or a color, at any brightness. ROCKNIX's battery mode always lights them at full
+    brightness, so the launcher holds the chosen brightness every 2 s, also while a game runs.
   - CPU and GPU governors, fan profile, battery details, time zone.
   - SSH, Samba and Syncthing on/off; reboot and power off.
 

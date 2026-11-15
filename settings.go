@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,6 +30,8 @@ type state struct {
 	gpuFreq                int
 	ssh, samba, syncthing  bool
 	timesync               bool
+	ledMode                string // "" when the handheld has no stick lights
+	ledBright, ledColor    int
 	timezone               string
 	storage, memory        string
 	version, kernel, uptime string
@@ -49,6 +52,7 @@ func (l *launcher) refresh(full bool) {
 		n.nets = markInUse(cachedWifi(), n.wifi.ssid)
 		n.fan = readFanProfile()
 		n.timezone, n.storage, n.version, n.kernel = readTimezone(), storageFree(), osVersion(), kernel()
+		n.ledMode, n.ledBright, n.ledColor = readLEDMode(), readLEDBrightness(), readLEDColor()
 	}
 	var gs []game
 	if full {
@@ -62,6 +66,7 @@ func (l *launcher) refresh(full bool) {
 		if !full {
 			n.btDevs, n.sinks, n.fan = o.btDevs, o.sinks, o.fan
 			n.timezone, n.storage, n.version, n.kernel = o.timezone, o.storage, o.version, o.kernel
+			n.ledMode, n.ledBright, n.ledColor = o.ledMode, o.ledBright, o.ledColor
 		}
 		if !full || o.wifiScanning {
 			n.nets = o.nets
@@ -207,7 +212,7 @@ var categories = []category{
 	}},
 	{"显示", "☀", func(l *launcher) []row {
 		s := &l.s
-		return []row{
+		rs := []row{
 			{kind: kSlider, label: "亮度", value: fmt.Sprintf("%d%%", s.brightness), slider: &l.slideBrightness,
 				adjust: func(d int) { l.setBrightness(s.brightness + d*5) }, set: l.setBrightness},
 			choice("界面缩放", fmt.Sprintf("%gx", l.zoom), func(d int) {
@@ -221,6 +226,46 @@ var categories = []category{
 				go setSetting("mygo-pocket.ui.zoom", fmt.Sprint(l.zoom))
 			}),
 		}
+		if s.ledMode == "" {
+			return rs
+		}
+		mode := 0
+		for i, m := range ledModes {
+			if m.id == s.ledMode {
+				mode = i
+			}
+		}
+		rs = append(rs, header("摇杆灯"), choice("模式", ledModes[mode].name, func(d int) {
+			s.ledMode = ledModes[clamp(mode+d, 0, len(ledModes)-1)].id
+			if s.ledMode == "rgb" && s.ledColor < 0 {
+				s.ledColor = 0
+			}
+			m, c, b := s.ledMode, s.ledColor, s.ledBright
+			go func() {
+				if m == "rgb" {
+					setLEDColor(c, b)
+				} else {
+					setLEDMode(m)
+				}
+			}()
+		}))
+		if s.ledMode == "off" {
+			return rs
+		}
+		if s.ledMode == "rgb" {
+			name := "自定义"
+			if s.ledColor >= 0 {
+				name = ledColors[s.ledColor].name
+			}
+			rs = append(rs, choice("颜色", name, func(d int) {
+				s.ledColor = clamp(s.ledColor+d, 0, len(ledColors)-1)
+				c, b := s.ledColor, s.ledBright
+				go setLEDColor(c, b)
+			}))
+		}
+		rs = append(rs, row{kind: kSlider, label: "亮度", key: "led-brightness", value: fmt.Sprintf("%d%%", s.ledBright), slider: &l.slideLED,
+			adjust: func(d int) { l.setLEDBrightness(s.ledBright + d*5) }, set: l.setLEDBrightness})
+		return rs
 	}},
 	{"声音", "♪", func(l *launcher) []row {
 		s := &l.s
@@ -298,6 +343,14 @@ func (l *launcher) setBrightness(v int) {
 	v = clamp(v, 5, 100)
 	l.s.brightness = v
 	go setBrightness(v)
+}
+
+func (l *launcher) setLEDBrightness(v int) {
+	v = clamp(v, 5, 100)
+	l.s.ledBright = v
+	ledLevel.Store(int32(v))
+	go holdLEDBrightness(v)
+	go setSetting("mygo-pocket.led.brightness", strconv.Itoa(v))
 }
 
 func (l *launcher) setVolume(v int) {

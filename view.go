@@ -58,7 +58,7 @@ func (l *launcher) view(c *ui.Context) {
 	// dark whatever the system says: ROCKNIX's desktop has no colour scheme, so the theme was light and the glass lightened what it frosts
 	t := *ui.DarkTheme().WithAccent(cPrimary)
 	c.SetTheme(&t)
-	l.slideBrightness, l.slideVolume = float64(l.s.brightness), float64(l.s.volume)
+	l.slideBrightness, l.slideVolume, l.slideLED = float64(l.s.brightness), float64(l.s.volume), float64(l.s.ledBright)
 	w, h := c.Size()
 	ui.Box(c).Fill().Background(cBase).Clip().Children(func() {
 		l.wallpaper(c, w, h)
