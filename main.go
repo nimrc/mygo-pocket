@@ -361,8 +361,8 @@ func main() {
 	l := &launcher{}
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
-		l.win.OnBlur(func() { l.behind.Store(true) })
-		l.win.OnFocus(func() { l.behind.Store(false) })
+		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
+		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
 		go l.refresh(true)
 		go l.input()
 		if p := os.Getenv("NX2L_CTL"); p != "" {
