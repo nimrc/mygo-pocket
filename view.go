@@ -173,36 +173,55 @@ func batteryIcon(c *ui.Context, b battery) {
 	})
 }
 
-// ---- games: one glass card each, tinted with the game's colour; the chosen one rises, lit at its rim ----
+// ---- games: one poster card each (the game's Steam cover, which carries its own logo); the chosen one grows, lit at its rim in the
+// game's colour, and its names show under the row, as a console's home screen does. A game without a cover is a glass card tinted with
+// its colour, its name on it ----
 
 func (l *launcher) gamesView(c *ui.Context, w float32) {
-	const gap = 20
-	cw := min(300, (w-56-gap*float32(len(games)-1))/float32(len(games)))
-	ui.Row(c).Grow(1).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {
-		for i, g := range games {
-			sel := i == l.card
-			card := ui.Column(c).Width(cw).Height(pick(sel, cw*1.0, cw*0.85)).Padding(20).Gap(6).Justify(ui.End)
-			card = pane(card, 26, g.from.Alpha(pick[float32](sel, 0.55, 0.28)), 0)
-			if sel {
-				card.Border(1.5, ui.RGBA(255, 255, 255, 0.55)).Shadow(0, 14, 44, 0, g.from.Alpha(0.6))
-			}
-			card.Opacity(pick[float32](sel, 1, 0.82)).Children(func() {
-				ui.Row(c).Children(func() { // the tag hugs its text
-					pane(ui.Box(c).PaddingX(9).PaddingY(4), 10, ui.Transparent, 0).Children(func() {
-						ui.Text(c, g.tag).FontSize(11).Bold().TextColor(cText)
+	const gap = 24
+	cw := min(240, (w-56-gap*float32(len(games)-1))/float32(len(games)))
+	ch := cw * 1.5 // Steam's library capsules are 600x900
+	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(26).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {
+			for i, g := range games {
+				sel := i == l.card
+				cover := covers[g.id]
+				card := ui.Box(c).Size(cw, ch).Radius(22).Clip()
+				grow := card.Animate("grow", pick[float32](sel, 1, 0), 160*time.Millisecond)
+				card.Scale(1+0.08*grow, 1+0.08*grow).Opacity(0.6 + 0.4*grow)
+				if sel {
+					card.Border(2, ui.RGBA(255, 255, 255, 0.7)).Shadow(0, 16, 48, 0, g.from.Alpha(0.7))
+				}
+				if cover == nil {
+					card.Material(glass.Glass{Tint: g.from.Alpha(0.5)})
+				}
+				card.Children(func() {
+					if cover != nil {
+						ui.Image(c, cover).Size(cw, ch).Fit(ui.Cover)
+						return
+					}
+					ui.Column(c).Fill().Padding(16).Justify(ui.End).Children(func() {
+						ui.Text(c, g.title).FontSize(20).Bold().TextColor(cWhite)
 					})
 				})
-				ui.Box(c).Grow(1)
-				ui.Text(c, g.title).FontSize(25).Bold().TextColor(cWhite)
-				ui.Text(c, g.sub).FontSize(14).TextColor(cSecondary)
-			})
-			if card.Clicked() {
-				if sel {
-					l.launch(g)
+				if card.Clicked() {
+					if sel {
+						l.launch(g)
+					}
+					l.card = i
 				}
-				l.card = i
 			}
-		}
+		})
+		g := games[l.card]
+		ui.Column(c).AlignItems(ui.Center).Gap(6).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Gap(12).Children(func() {
+				ui.Text(c, g.title).FontSize(28).Bold().TextColor(cWhite)
+				pane(ui.Box(c).PaddingX(9).PaddingY(3), 9, g.from.Alpha(0.5), 0).Children(func() {
+					ui.Text(c, g.tag).FontSize(11).Bold().TextColor(cText)
+				})
+			})
+			ui.Text(c, g.sub).FontSize(15).TextColor(cSecondary)
+		})
 	})
 }
 

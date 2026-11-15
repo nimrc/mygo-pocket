@@ -15,6 +15,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -29,6 +30,28 @@ type game struct {
 	id, title, sub, tag string
 	from, to             ui.Color
 	cmd                  string
+}
+
+// covers are the games' posters by id: art/<id>.jpg beside the launcher (Steam's library capsules, fetch-art.sh)
+var covers = map[string]*ui.Bitmap{}
+
+// loadCovers reads each game's cover from art/ beside the executable. The covers are the games' Steam art, kept on the device, not in git
+func loadCovers() {
+	dir := "art"
+	if exe, err := os.Executable(); err == nil {
+		dir = filepath.Join(filepath.Dir(exe), "art")
+	}
+	for i := range games {
+		data, err := os.ReadFile(filepath.Join(dir, games[i].id+".jpg"))
+		if err != nil {
+			continue
+		}
+		if b, err := ui.DecodeBitmap(data); err == nil {
+			covers[games[i].id] = b
+		} else {
+			log.Printf("cover %s: %v", games[i].id, err)
+		}
+	}
 }
 
 var games = []game{
@@ -360,6 +383,7 @@ func (l *launcher) control(path string) {
 
 func main() {
 	l := &launcher{zoom: readZoom()}
+	loadCovers()
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "nx2l", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
