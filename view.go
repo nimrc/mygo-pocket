@@ -120,8 +120,8 @@ func (l *launcher) view(c *ui.Context) {
 // colour or the window changes: three radial gradients the window's size took a Mali-G52 longer than everything else on it.
 func (l *launcher) wallpaper(c *ui.Context, w, h float32) {
 	a := ui.Hex("#2d5bff")
-	if l.focus == fGames && len(l.games) > 0 {
-		a = l.games[l.card].from
+	if games := l.shown(); l.focus == fGames && len(games) > 0 {
+		a = games[l.card].from
 	}
 	// under the flow (an absolute element paints over it, as in CSS: the lights tinted the posters and the glass had only black to frost),
 	// and out of hit testing
@@ -273,29 +273,47 @@ func batteryIcon(c *ui.Context, b battery) {
 // game's colour, and its names show under the row, as a console's home screen does. A game without a cover is a glass card tinted with
 // its colour, its name on it ----
 
+// gamesView shows up to five cards around the choice, the window following it as gamesCompact's does
 func (l *launcher) gamesView(c *ui.Context, w float32) {
 	const gap = 24
-	games := l.games
+	games := l.shown()
 	if len(games) == 0 {
 		l.noGames(c)
 		return
 	}
-	cw := min(240, (w-56-gap*float32(len(games)-1))/float32(len(games)))
+	n := min(5, len(games))
+	first := clamp(l.card-n/2, 0, len(games)-n)
+	cw := min(240, (w-56-2*28-gap*float32(n+1))/float32(n))
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(26).Children(func() {
+		l.seriesTitle(c, 17)
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {
-			for i := range games {
+			ui.Text(c, "‹").FontSize(32).Width(28).TextAlign(ui.Center).TextColor(pick(first > 0, cSecondary, ui.Transparent))
+			for i := first; i < first+n; i++ {
 				l.poster(c, i, cw)
 			}
+			ui.Text(c, "›").FontSize(32).Width(28).TextAlign(ui.Center).TextColor(pick(first+n < len(games), cSecondary, ui.Transparent))
 		})
 		l.gameNames(c, games[l.card], 28, 15)
 	})
+}
+
+// seriesTitle names the open series over its row; a tap on it goes back out
+func (l *launcher) seriesTitle(c *ui.Context, size float32) {
+	i := l.openSeries()
+	if i < 0 {
+		return
+	}
+	t := ui.Text(c, "‹  "+l.games[i].title).FontSize(size).Bold().TextColor(cSecondary)
+	if t.Clicked() {
+		l.closeSeries()
+	}
 }
 
 // gamesCompact shows the cards three at a time, as large as the panel's height allows, the window following the choice; a ‹ or › at a
 // side tells there are more that way
 func (l *launcher) gamesCompact(c *ui.Context, w, h float32) {
 	const gap = 16
-	games := l.games
+	games := l.shown()
 	if len(games) == 0 {
 		l.noGames(c)
 		return
@@ -304,6 +322,7 @@ func (l *launcher) gamesCompact(c *ui.Context, w, h float32) {
 	n := min(3, len(games))
 	first := clamp(l.card-n/2, 0, len(games)-n)
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(14).Children(func() {
+		l.seriesTitle(c, 16)
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {
 			ui.Text(c, "‹").FontSize(28).Width(28).TextAlign(ui.Center).TextColor(pick(first > 0, cSecondary, ui.Transparent))
 			for i := first; i < first+n; i++ {
@@ -322,9 +341,9 @@ func (l *launcher) noGames(c *ui.Context) {
 	})
 }
 
-// poster is game i's card, cw wide
+// poster is card i of the row shown, cw wide
 func (l *launcher) poster(c *ui.Context, i int, cw float32) {
-	g := l.games[i]
+	g := l.shown()[i]
 	ch := cw * 1.5 // Steam's library capsules are 600x900
 	sel := i == l.card
 	cover := g.bmp
@@ -355,10 +374,10 @@ func (l *launcher) poster(c *ui.Context, i int, cw float32) {
 		})
 	})
 	if card.Clicked() {
-		if sel {
-			l.launch(g)
-		}
 		l.card = i
+		if sel {
+			l.choose(g)
+		}
 	}
 }
 
@@ -558,6 +577,12 @@ func (l *launcher) footer(c *ui.Context) {
 		hint = l.note
 	case l.focus == fGames:
 		hint = "←→ 选择    A 开始    L/R 设置"
+		if games := l.shown(); l.card < len(games) && games[l.card].children != nil {
+			hint = "←→ 选择    A 打开    L/R 设置"
+		}
+		if l.series != "" {
+			hint = strings.Replace(hint, "    L/R", "    B 返回    L/R", 1)
+		}
 	case l.focus == fCategories && l.compact:
 		hint = "←→ 分类    ↓ / A 进入    B 游戏"
 	case l.focus == fCategories:

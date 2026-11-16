@@ -124,6 +124,7 @@ func TestManifestsMatchSchema(t *testing.T) {
 		{"kind": "flatpak", "title": "x"},
 		{"kind": "native", "title": "x"},
 		{"kind": "retroarch", "title": "x", "core": "snes9x"},
+		{"kind": "series"},
 		{"kind": "command", "title": "x", "exec": []string{}},
 		{"title": "x", "color": "red"},
 		{"title": "x", "titel": "typo"},
@@ -132,5 +133,44 @@ func TestManifestsMatchSchema(t *testing.T) {
 		if valid("bad", data) == nil {
 			t.Errorf("%s passes the schema", data)
 		}
+	}
+}
+
+// TestSeries: a series' subdirectories are its cards, one level deep; one without cards is not a card, and one without a poster shows
+// its first game's
+func TestSeries(t *testing.T) {
+	root := t.TempDir()
+	var cover bytes.Buffer
+	png.Encode(&cover, image.NewRGBA(image.Rect(0, 0, 2, 3)))
+	series := gameDir(t, root, "zelda", map[string]any{"pocket.json": map[string]any{"kind": "series", "title": "塞尔达传说"}})
+	gameDir(t, series, "minish", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "Minish", "exec": []string{"true"}, "order": 2}})
+	gameDir(t, series, "la", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "LA", "exec": []string{"true"}, "order": 1}, "cover.png": cover.String()})
+	inner := gameDir(t, series, "inner", map[string]any{"pocket.json": map[string]any{"kind": "series", "title": "Inner"}})
+	gameDir(t, inner, "deep", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "Deep", "exec": []string{"true"}}})
+	gameDir(t, root, "none", map[string]any{"pocket.json": map[string]any{"kind": "series", "title": "None"}})
+	gameDir(t, root, "solo", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "Solo", "exec": []string{"true"}}})
+
+	t.Setenv("MYGO_POCKET_GAMES", root)
+	gs := scanGames()
+	var ids []string
+	for _, g := range gs {
+		ids = append(ids, g.id)
+	}
+	if want := []string{"solo", "zelda"}; !slices.Equal(ids, want) {
+		t.Fatalf("cards %q, want %q", ids, want)
+	}
+	z := gs[1]
+	var kids []string
+	for _, g := range z.children {
+		kids = append(kids, g.id)
+	}
+	if want := []string{"la", "minish"}; !slices.Equal(kids, want) {
+		t.Errorf("the series' cards %q, want %q (a series in a series is not one)", kids, want)
+	}
+	if z.tag != "SERIES · 2" || z.argv != nil {
+		t.Errorf("the series: tag %q argv %q", z.tag, z.argv)
+	}
+	if z.cover != z.children[0].cover || z.bmp == nil {
+		t.Errorf("the series' poster %q, want its first game's %q", z.cover, z.children[0].cover)
 	}
 }

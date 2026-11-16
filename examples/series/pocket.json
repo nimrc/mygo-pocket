@@ -1,0 +1,8 @@
+{
+  "$schema": "../../schema/pocket.schema.json",
+  "kind": "series",
+  "title": "塞尔达传说 合集",
+  "subtitle": "The Legend of Zelda",
+  "color": "#047857",
+  "order": 20
+}
