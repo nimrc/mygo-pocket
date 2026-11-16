@@ -285,7 +285,9 @@ var categories = []category{
 	}},
 	{"性能", "⚡", func(l *launcher) []row {
 		s := &l.s
-		return []row{
+		// fanSpeed is -1 without a pwmfan: the fan rows are left out on a handheld without one, such as the RG ARC
+		fan := s.fanSpeed >= 0
+		rs := []row{
 			choice("CPU 调频", governorNames[s.governor], func(d int) {
 				g := cycle(governors, s.governor, d)
 				l.do("CPU 调频："+governorNames[g], func() string { setGovernor(g); return "" })
@@ -294,15 +296,20 @@ var categories = []category{
 				g := cycle(gpuGovernors, s.gpuGovernor, d)
 				l.do("GPU 调频："+gpuGovernorNames[g], func() string { setGPUGovernor(g); return "" })
 			}),
-			choice("风扇模式", fanNames[s.fan], func(d int) {
+		}
+		if fan {
+			rs = append(rs, choice("风扇模式", fanNames[s.fan], func(d int) {
 				p := cycle(fanProfiles, s.fan, d)
 				l.do("风扇："+fanNames[p], func() string { setFanProfile(p); return "" })
-			}),
-			header("实时状态"),
-			info("CPU", fmt.Sprintf("%d°C  ·  %s", s.cpuTemp, s.cpuFreq)),
-			info("GPU", fmt.Sprintf("%d°C  ·  %d MHz", s.gpuTemp, s.gpuFreq)),
-			info("风扇转速", fmt.Sprintf("%d%%", s.fanSpeed)),
+			}))
 		}
+		rs = append(rs, header("实时状态"),
+			info("CPU", fmt.Sprintf("%d°C  ·  %s", s.cpuTemp, s.cpuFreq)),
+			info("GPU", fmt.Sprintf("%d°C  ·  %d MHz", s.gpuTemp, s.gpuFreq)))
+		if fan {
+			rs = append(rs, info("风扇转速", fmt.Sprintf("%d%%", s.fanSpeed)))
+		}
+		return rs
 	}},
 	{"电源", "▮", func(l *launcher) []row {
 		s := &l.s
@@ -310,15 +317,19 @@ var categories = []category{
 		if s.bat.charging {
 			st = "充电中"
 		}
-		watts := s.batInfo.voltage * s.batInfo.current
-		return []row{
-			info("电量", fmt.Sprintf("%d%%  ·  %s", s.bat.percent, st)),
-			info("功率", fmt.Sprintf("%.1f W  ·  %.2f V  ·  %.2f A", abs(watts), s.batInfo.voltage, abs(s.batInfo.current))),
-			info("电池温度", strings.TrimSuffix(fmt.Sprintf("%.1f°C  ·  %s", s.batInfo.temp, s.batInfo.health), "  ·  ")),
-			header("电源"),
-			{kind: kAction, label: "重启", act: func() { l.confirm("重启掌机？", func() string { return run(10*time.Second, "systemctl", "reboot") }) }},
-			{kind: kAction, label: "关机", danger: true, act: func() { l.confirm("关机？", func() string { return run(10*time.Second, "systemctl", "poweroff") }) }},
+		b := s.batInfo
+		rs := []row{info("电量", fmt.Sprintf("%d%%  ·  %s", s.bat.percent, st))}
+		if b.voltage > 0 {
+			rs = append(rs, info("功率", fmt.Sprintf("%.1f W  ·  %.2f V  ·  %.2f A", abs(b.voltage*b.current), b.voltage, abs(b.current))))
 		}
+		if b.hasTemp {
+			rs = append(rs, info("电池温度", strings.TrimSuffix(fmt.Sprintf("%.1f°C  ·  %s", b.temp, b.health), "  ·  ")))
+		}
+		return append(rs,
+			header("电源"),
+			row{kind: kAction, label: "重启", act: func() { l.confirm("重启掌机？", func() string { return run(10*time.Second, "systemctl", "reboot") }) }},
+			row{kind: kAction, label: "关机", danger: true, act: func() { l.confirm("关机？", func() string { return run(10*time.Second, "systemctl", "poweroff") }) }},
+		)
 	}},
 	{"系统", "⚙", func(l *launcher) []row {
 		s := &l.s

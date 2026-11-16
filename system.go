@@ -496,15 +496,28 @@ func setService(name, settingKey string, on bool) {
 // ---- power: battery details ----
 
 type batteryInfo struct {
-	voltage float64 // V
+	voltage float64 // V, 0 where the gauge does not say
 	current float64 // A, positive charging
 	health  string
 	temp    float64 // °C
+	hasTemp bool
 }
 
+// readBatteryInfo reads the gauge's _now values, or the _avg ones the RG ARC's rk817 gives instead; it has no temperature
 func readBatteryInfo() batteryInfo {
 	b := "/sys/class/power_supply/battery/"
-	return batteryInfo{float64(readInt(b+"voltage_now")) / 1e6, float64(readInt(b+"current_now")) / 1e6, readFile(b + "health"), float64(readInt(b+"temp")) / 10}
+	first := func(names ...string) string {
+		for _, n := range names {
+			if v := readFile(b + n); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	num := func(v string) float64 { f, _ := strconv.ParseFloat(v, 64); return f }
+	temp := readFile(b + "temp")
+	return batteryInfo{num(first("voltage_now", "voltage_avg")) / 1e6, num(first("current_now", "current_avg")) / 1e6, readFile(b + "health"),
+		num(temp) / 10, temp != ""}
 }
 
 // ---- system: time zone, host, uptime ----

@@ -3,8 +3,9 @@ package main
 // The launcher's look: Liquid Glass (MyGo's glass plugin) over a wallpaper of coloured light, with ColorOS 16's colours and metrics as
 // suqi8/coui transcribes them (dark scheme: primary #247CFF; text at 90%, secondary text at 54%, summaries at 40% white; settings as
 // grouped rows in rounded cards; switches with a primary track and a white knob).
-// The whole view is zoomed (Context.SetZoom, 1.5 by default, 显示 → 界面缩放): it lays out in a window 1/zoom the panel's size and draws
-// at the panel's resolution, so the layout takes its widths from c.Size() rather than from the 1920x1080 panel.
+// The whole view is zoomed (Context.SetZoom, 1.5 by default for a 1080p panel and in proportion to the panel's short side otherwise,
+// 显示 → 界面缩放): it lays out in a window 1/zoom the panel's size and draws at the panel's resolution, so the layout takes its widths
+// from c.Size() rather than from the panel.
 
 import (
 	"fmt"
@@ -49,7 +50,9 @@ func accent(e ui.Element, col ui.Color) ui.Element {
 }
 
 func (l *launcher) view(c *ui.Context) {
-	c.SetZoom(l.zoom)
+	// 界面缩放 is relative to a 1080p panel: 1.5x lays out in 1280x720 on the Flip 2 and in 960x720 on a 640x480 RG ARC
+	pw, ph := c.Size()
+	c.SetZoom(l.zoom * min(pw, ph) * c.Zoom() / 1080)
 	if l.note != "" && time.Since(l.noteAt) > 4*time.Second {
 		l.note = ""
 	} else if l.note != "" {
