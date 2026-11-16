@@ -18,7 +18,7 @@ Flip 2 (Snapdragon 865, ROCKNIX).
   launcher is itself a MyGo app.
 - **System settings**:
   - Wi-Fi (scan, join with an on-screen keyboard, forget) and Bluetooth (pair, connect, forget).
-  - Brightness, volume and UI zoom (1–2×, default 1.5× for 1080p).
+  - Brightness, volume and UI zoom (1–2×, default 1.5×, relative to a 1080p panel).
   - Analog stick lights: off, battery level or a color, at any brightness. ROCKNIX's battery mode always lights them at full
     brightness, so the launcher holds the chosen brightness every 2 s, also while a game runs.
   - CPU and GPU governors, fan profile, battery details, time zone.
@@ -78,8 +78,11 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
   `emustation.service` is masked, and `essway.service` gets a drop-in whose condition never holds. `/usr` is read-only, so this is how
   EmulationStation is removed.
 - **`pocketctl disable`**: puts ROCKNIX's defaults back.
-- **Another handheld**: `dist/sway.conf` is written for the Flip 2's panel (`DSI-1`, rotated 270°). Change its output and touch lines for
-  another device.
+- **Updating**: the running binary cannot be overwritten in place. Copy it as `mygo-pocket.new`, `mv` it over `mygo-pocket`, then
+  `pocketctl restart`.
+- **Another handheld**: `dist/sway.conf` is written for the Flip 2's panel (`DSI-1`, rotated 270°). `session.sh` swaps in the device's
+  own DSI or eDP panel and the rotation ROCKNIX gives it, so the same files run on an RG ARC (640×480) too. 界面缩放 is relative to a
+  1080p panel: the view's zoom follows the panel's short side.
 - **Logs**: `/storage/mygo-pocket/launcher.log` and `sway.log`.
 
 ## Controls
