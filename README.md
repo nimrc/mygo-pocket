@@ -83,6 +83,12 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 - **Another handheld**: `dist/sway.conf` is written for the Flip 2's panel (`DSI-1`, rotated 270°). `session.sh` swaps in the device's
   own DSI or eDP panel and the rotation ROCKNIX gives it, so the same files run on an RG ARC (640×480) too. 界面缩放 is relative to a
   1080p panel: the view's zoom follows the panel's short side.
+- **Small panels** (under 720 pixels on the short side, such as the RG ARC's 4-inch 640×480) get a compact layout: it lays out in about
+  600×450 at the default 1.5×, so text is 1.5–1.7 times the size the 1080p layout gives it there; the games show three cards at a time,
+  and the settings' categories are a row of icons above the rows. Nothing is glass there (see [Performance](#performance)).
+- **Panfrost** (the RG ARC's Mali-G52 under ROCKNIX's `gpudriver panfrost`): `session.sh` sets `GDK_GL=gles`, as its desktop OpenGL
+  is 3.1, under the 3.3 MyGo needs. On OpenGL ES the window is transparent, so that GTK composites it with GL instead of reading every
+  frame back.
 - **Logs**: `/storage/mygo-pocket/launcher.log` and `sway.log`.
 
 ## Controls
@@ -90,7 +96,7 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 - **L/R**: switch between Games and Settings.
 - **Games**: left/right choose a card, A starts it.
 - **Settings**:
-  - Up/down choose a category; right or A enters it.
+  - Up/down choose a category (left/right along the icons on a small panel); right or A enters it (down or A on a small panel).
   - Up/down choose a row. A acts on it, X does its second action (forget, for example), and left or B goes back.
   - A value (a choice or a slider) changes only after A: the row lights up, left/right change the value, and A or B is done. So left
     never changes a value by mistake when it was meant as back.
@@ -142,6 +148,19 @@ On the Flip 2 at the games screen, the launcher and sway together use 151 MB RSS
 
 The cards grow by changing their size, not by a transform. MyGo masks a clip or a rounded image under a transform on the CPU, which
 took 1.4 cores.
+
+The wallpaper's three lights are drawn into a 192-pixel-wide bitmap that the GPU stretches over the window, redrawn only as the
+chosen game's colour moves, instead of three radial gradients the window's size.
+
+On the RG ARC (Mali-G52, Panfrost, OpenGL ES 3.1), measured with Panfrost's per-client GPU time (`/proc/<pid>/fdinfo`):
+
+- **GTK 3's read back**: an opaque `GtkGLArea` is a renderbuffer, which GTK copies to the window only with framebuffer blits; on ES it
+  finds none, and read each frame back with `glReadPixels` (about 150 ms a frame). The window is transparent on ES for this.
+- **Glass**: each pane reads what is under it back and blurs it, about 25 ms of the GPU's time a pane, so a compact panel has none.
+- **MyGo's GL renderer** drew everything with its general fragment shader (13 727 instructions, one thread, 1 569 register fills on
+  the G52): a fill the window's size cost about 30 ms. [nimrc/mygo#2](https://github.com/nimrc/mygo/pull/2), which `go.mod` replaces
+  MyGo with, specializes it for each `gpu.Class`, as Metal and Direct3D 11 do: moving between cards draws 192 frames in 5 s, where it
+  drew 56.
 
 ## License
 

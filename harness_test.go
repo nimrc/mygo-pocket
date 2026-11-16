@@ -120,6 +120,25 @@ func (h *harness) press(names ...string) {
 	}
 }
 
+// toCategory goes to the settings and moves n categories on: down the sidebar, or right along a compact panel's icons
+func (h *harness) toCategory(n int) {
+	h.t.Helper()
+	h.press("r")
+	for range n {
+		h.press(pick(h.l.compact, "right", "down"))
+	}
+}
+
+// hasCard reports whether the launcher has a card of id
+func (h *harness) hasCard(id string) bool {
+	for _, g := range h.l.games {
+		if g.id == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *harness) click(text string) {
 	h.t.Helper()
 	if err := h.tt.Click(text); err != nil {
