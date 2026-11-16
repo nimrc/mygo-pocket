@@ -362,16 +362,16 @@ func TestTouchSeries(t *testing.T) {
 	})
 }
 
-// TestManyCards: on a large panel too the cards show five at a time around the choice
+// TestManyCards: on a large panel the cards keep their size, four across the Flip 2 around the choice
 func TestManyCards(t *testing.T) {
 	root := t.TempDir()
 	for i, id := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7"} {
 		gameDir(t, root, id, map[string]any{"pocket.json": map[string]any{"kind": "command", "title": strings.ToUpper(id), "exec": []string{"true"}, "order": i}})
 	}
 	h := newHarness(t, panels[0], nil, root)
-	h.shows("C1", "C5", "›")
-	h.hides("C6", "C7")
+	h.shows("C1", "C4", "›")
+	h.hides("C5", "C6", "C7")
 	h.press("right", "right", "right", "right", "right")
-	h.shows("C3", "C7")
-	h.hides("C1", "C2")
+	h.shows("C4", "C7")
+	h.hides("C1", "C3")
 }

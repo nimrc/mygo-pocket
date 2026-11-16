@@ -273,17 +273,19 @@ func batteryIcon(c *ui.Context, b battery) {
 // game's colour, and its names show under the row, as a console's home screen does. A game without a cover is a glass card tinted with
 // its colour, its name on it ----
 
-// gamesView shows up to five cards around the choice, the window following it as gamesCompact's does
+// gamesView shows the cards at one size, as many as fit across around the choice (four on the Flip 2, three on the Nova), the window
+// following it as gamesCompact's does. The size is in the view's units, which follow the panel's short side: at 1.5x a poster is half the
+// panel's height on any handheld, whatever the number of cards
 func (l *launcher) gamesView(c *ui.Context, w float32) {
-	const gap = 24
+	const gap, cw = 24, 240
 	games := l.shown()
 	if len(games) == 0 {
 		l.noGames(c)
 		return
 	}
-	n := min(5, len(games))
+	// the padding, the arrows and the chosen card's growth beside n cards and the n+1 gaps around them
+	n := clamp(int((w-56-2*28-gap-0.08*cw)/(cw+gap)), 1, len(games))
 	first := clamp(l.card-n/2, 0, len(games)-n)
-	cw := min(240, (w-56-2*28-gap*float32(n+1))/float32(n))
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(26).Children(func() {
 		l.seriesTitle(c, 17)
 		ui.Row(c).AlignItems(ui.Center).Justify(ui.Center).Gap(gap).Children(func() {

@@ -95,8 +95,8 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 ## Controls
 
 - **L/R**: switch between Games and Settings.
-- **Games**: left/right choose a card, A starts it or opens a series, and B goes back out of a series. Five cards show at a time (three on a
-  small panel) around the choice.
+- **Games**: left/right choose a card, A starts it or opens a series, and B goes back out of a series. The cards keep one size and show as many as fit
+  across around the choice: four on the Flip 2, three on a 4:3 panel such as the Nova's or the RG ARC's.
 - **Settings**:
   - Up/down choose a category (left/right along the icons on a small panel); right or A enters it (down or A on a small panel).
   - Up/down choose a row. A acts on it, X does its second action (forget, for example), and left or B goes back.
