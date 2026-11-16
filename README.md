@@ -42,6 +42,7 @@ name is the card's id. The launcher rescans every 30 s, so a copied directory sh
 | `native` | Any other program in the directory (an SDL game, a script). | `title`, `exec` |
 | `command` | A program on `PATH`, such as `retroarch`. | `title`, `exec` |
 | `retroarch` | One retro game: RetroArch runs `core` on `rom`. | `title`, `core`, `rom` |
+| `series` | A row of its own: each subdirectory is one of its cards (a series in a series is not a card). A opens it, B goes back out. Without a `cover`, it shows its first card's. | `title` |
 
 ```json
 {
@@ -94,7 +95,8 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 ## Controls
 
 - **L/R**: switch between Games and Settings.
-- **Games**: left/right choose a card, A starts it.
+- **Games**: left/right choose a card, A starts it or opens a series, and B goes back out of a series. The cards keep one size and show as many as fit
+  across around the choice: four on the Flip 2, three on a 4:3 panel such as the Nova's or the RG ARC's.
 - **Settings**:
   - Up/down choose a category (left/right along the icons on a small panel); right or A enters it (down or A on a small panel).
   - Up/down choose a row. A acts on it, X does its second action (forget, for example), and left or B goes back.
@@ -135,7 +137,7 @@ from both.
 
 - A button name: `up`, `down`, `left`, `right`, `a`, `b`, `x`, `l`, `r`, `start`, `back`.
 - `find <category> <label>`: selects a settings row.
-- `game <id>`: chooses a card on the games screen (then `a` starts it).
+- `game <id>`: chooses a card on the games screen, opening its series when it is in one (then `a` starts it).
 - `type <text>`: types into the open keyboard.
 
 Combined with `grim` for screenshots, this drives every screen over SSH. `MYGO_POCKET_PPROF=<file>` writes a CPU profile of the first

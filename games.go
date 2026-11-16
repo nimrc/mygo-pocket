@@ -9,6 +9,7 @@ package main
 //	native     any other program in the directory, exec[0] relative to it: an SDL game, a script
 //	command    a program on PATH, exec[0] as is: retroarch, a system tool
 //	retroarch  one retro game: RetroArch runs the core on the ROM in the directory
+//	series     a row of its own: its subdirectories are its cards; A opens it, B goes back out (a series in a series is not a card)
 
 import (
 	"encoding/json"
@@ -60,6 +61,7 @@ type game struct {
 	cover                    string
 	bmp                      *ui.Bitmap
 	order                    int
+	children                 []game // a series' cards
 }
 
 func gameRoots() []string {
@@ -70,9 +72,12 @@ func gameRoots() []string {
 }
 
 // scanGames reads the roots, ordered by the manifests' order, then title
-func scanGames() []game {
+func scanGames() []game { return scanRoots(gameRoots(), true) }
+
+// scanRoots reads the cards in roots; series tells whether a series is a card there (not inside another series)
+func scanRoots(roots []string, series bool) []game {
 	var gs []game
-	for _, root := range gameRoots() {
+	for _, root := range roots {
 		ents, err := os.ReadDir(root)
 		if err != nil {
 			continue
@@ -81,7 +86,7 @@ func scanGames() []game {
 			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 				continue
 			}
-			if g, ok := readGame(root, filepath.Join(root, e.Name())); ok {
+			if g, ok := readGame(root, filepath.Join(root, e.Name()), series); ok {
 				gs = append(gs, g)
 			}
 		}
@@ -95,7 +100,7 @@ func scanGames() []game {
 	return gs
 }
 
-func readGame(root, dir string) (game, bool) {
+func readGame(root, dir string, series bool) (game, bool) {
 	var m manifest
 	var p dataPack
 	hasM := readJSON(filepath.Join(dir, manifestName), &m)
@@ -142,6 +147,14 @@ func readGame(root, dir string) (game, bool) {
 		}
 		g.tag = cmp(g.tag, "RETRO · "+strings.ToUpper(m.Core))
 		g.argv = []string{"retroarch", "-L", core, filepath.Join(dir, m.ROM)}
+	case "series":
+		if !series {
+			return fail("a series in a series")
+		}
+		if g.children = scanRoots([]string{dir}, false); len(g.children) == 0 {
+			return fail("a series without cards")
+		}
+		g.tag = cmp(g.tag, fmt.Sprintf("SERIES · %d", len(g.children)))
 	default:
 		return fail(fmt.Sprintf("unknown kind %q", m.Kind))
 	}
@@ -162,6 +175,9 @@ func readGame(root, dir string) (game, bool) {
 			g.cover = filepath.Join(dir, c)
 			break
 		}
+	}
+	if g.cover == "" && len(g.children) > 0 { // a series without its own poster shows its first game's
+		g.cover = g.children[0].cover
 	}
 	g.bmp = loadCover(g.cover)
 	return g, true
@@ -245,16 +261,69 @@ func loadCover(path string) *ui.Bitmap {
 	return bmp
 }
 
-// setGames swaps in a fresh scan, the chosen card staying on its game
+// setGames swaps in a fresh scan, the chosen card staying on its game; an open series that is gone closes
 func (l *launcher) setGames(gs []game) {
 	id := ""
-	if l.card < len(l.games) {
-		id = l.games[l.card].id
+	if shown := l.shown(); l.card < len(shown) {
+		id = shown[l.card].id
 	}
 	l.games, l.card = gs, 0
-	for i, g := range gs {
+	if l.series != "" && l.openSeries() < 0 {
+		id, l.series = l.series, ""
+	}
+	for i, g := range l.shown() {
 		if g.id == id {
 			l.card = i
+		}
+	}
+}
+
+// shown is the games screen's row: the cards, or the open series' cards
+func (l *launcher) shown() []game {
+	if i := l.openSeries(); i >= 0 {
+		return l.games[i].children
+	}
+	return l.games
+}
+
+// openSeries is the open series' index in the cards, -1 when none is open
+func (l *launcher) openSeries() int {
+	for i, g := range l.games {
+		if l.series != "" && g.id == l.series && g.children != nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// choose starts a card, or opens it when it is a series
+func (l *launcher) choose(g game) {
+	if g.children == nil {
+		l.launch(g)
+		return
+	}
+	l.series, l.card = g.id, 0
+}
+
+// closeSeries goes back out of the open series, onto its card
+func (l *launcher) closeSeries() {
+	if i := l.openSeries(); i >= 0 {
+		l.series, l.card = "", i
+	}
+}
+
+// chooseID chooses the card of id (MYGO_POCKET_CTL "game <id>"), opening its series when it is in one
+func (l *launcher) chooseID(id string) {
+	for i, g := range l.games {
+		if g.id == id {
+			l.focus, l.series, l.card, l.editing = fGames, "", i, false
+			return
+		}
+		for j, c := range g.children {
+			if c.id == id {
+				l.focus, l.series, l.card, l.editing = fGames, g.id, j, false
+				return
+			}
 		}
 	}
 }

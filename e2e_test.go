@@ -295,3 +295,83 @@ func TestCompact(t *testing.T) {
 		t.Errorf("down on the categories: focus %d, want the rows", h.l.focus)
 	}
 }
+
+// TestSeriesScreen: A opens a series into a row of its own, its games start from there, and B goes back out onto the series' card; the
+// FIFO's "game <id>" opens the series a game is in
+func TestSeriesScreen(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		root := t.TempDir()
+		gameDir(t, root, "solo", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "Solo", "exec": []string{"true"}}})
+		series := gameDir(t, root, "zz-mslug", map[string]any{"pocket.json": map[string]any{"kind": "series", "title": "合金弹头", "subtitle": "Metal Slug"}})
+		gameDir(t, series, "ms1", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "MS 1", "exec": []string{"true"}, "order": 1}})
+		dir := gameDir(t, series, "ms2", map[string]any{
+			"pocket.json": map[string]any{"kind": "native", "title": "MS 2", "exec": []string{"run.sh"}, "order": 2},
+			"run.sh":      "#!/bin/sh\ntouch started\n",
+		})
+		h := newHarness(t, p, nil, root)
+		h.press("right")
+		h.shows("合金弹头", "SERIES · 2", "A 打开")
+		h.press("a")
+		if h.l.series != "zz-mslug" || h.l.card != 0 {
+			t.Fatalf("A on the series: series %q card %d", h.l.series, h.l.card)
+		}
+		h.shows("MS 1", "‹  合金弹头", "B 返回")
+		h.hides("Solo")
+		h.shot("series")
+		h.press("right", "a")
+		h.until("MS 2 ends", func() bool { return h.l.running == "" && exists(filepath.Join(dir, "started")) })
+		if h.l.series != "zz-mslug" || h.l.card != 1 {
+			t.Errorf("after the game: series %q card %d, want the series' second card", h.l.series, h.l.card)
+		}
+		h.press("b")
+		if h.l.series != "" || h.l.games[h.l.card].id != "zz-mslug" {
+			t.Errorf("B in the series: series %q on %s, want the series' card", h.l.series, h.l.games[h.l.card].id)
+		}
+		h.shows("Solo", "A 打开")
+		h.press("b") // nothing to go back out of
+		if h.l.focus != fGames || h.l.games[h.l.card].id != "zz-mslug" {
+			t.Errorf("B on the cards moved the launcher")
+		}
+		h.l.chooseID("ms2")
+		h.tt.Frame()
+		h.shows("MS 2", "‹  合金弹头")
+		os.RemoveAll(series) // the open series is gone at the next scan: back on the cards
+		go h.l.refresh(true)
+		h.until("the series gone", func() bool { return !h.hasCard("zz-mslug") })
+		if h.l.series != "" {
+			t.Errorf("the series is gone but still open")
+		}
+		h.shows("Solo")
+	})
+}
+
+// TestTouchSeries: a tap on the chosen series opens it, a tap on its name goes back out
+func TestTouchSeries(t *testing.T) {
+	onPanels(t, true, func(t *testing.T, p panel) {
+		root := t.TempDir()
+		series := gameDir(t, root, "pk", map[string]any{"pocket.json": map[string]any{"kind": "series", "title": "宝可梦"}})
+		gameDir(t, series, "gold", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "Gold", "exec": []string{"true"}}})
+		h := newHarness(t, p, nil, root)
+		h.click("宝可梦")
+		h.shows("Gold")
+		h.click("‹  宝可梦")
+		h.hides("Gold")
+		if h.l.series != "" {
+			t.Errorf("a tap on the series' name left it open")
+		}
+	})
+}
+
+// TestManyCards: on a large panel the cards keep their size, four across the Flip 2 around the choice
+func TestManyCards(t *testing.T) {
+	root := t.TempDir()
+	for i, id := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7"} {
+		gameDir(t, root, id, map[string]any{"pocket.json": map[string]any{"kind": "command", "title": strings.ToUpper(id), "exec": []string{"true"}, "order": i}})
+	}
+	h := newHarness(t, panels[0], nil, root)
+	h.shows("C1", "C4", "›")
+	h.hides("C5", "C6", "C7")
+	h.press("right", "right", "right", "right", "right")
+	h.shows("C4", "C7")
+	h.hides("C1", "C3")
+}

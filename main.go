@@ -1,13 +1,13 @@
 // mygo-pocket: a handheld's home screen on ROCKNIX, in place of EmulationStation. A fullscreen MyGo window in a sway session of its own
 // (dist/session.sh, dist/sway.conf): the games found under $MYGO_POCKET_GAMES (games.go) and the handheld's settings through ROCKNIX's tools (system.go).
 //
-// Gamepad: L/R switch between Games and Settings. Games: left/right choose, A starts. Settings: the category list on the left (up/down,
+// Gamepad: L/R switch between Games and Settings. Games: left/right choose, A starts (or opens a series, B back out). Settings: the category list on the left (up/down,
 // right or A enters it), its rows on the right (up/down choose, left/right change, A does, X the row's second action, B back). Touch: a tap
 // does what A does, a finger drags a slider (MYGO_TOUCH_POINTER). A game runs as a child process, fullscreen above the launcher; the
 // launcher reads no input while it runs.
 //
 // MYGO_POCKET_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
-// "find <category> <label>", "game <id>" (chooses that card) and "type <text>" (the open keyboard), for testing on the device with screenshots.
+// "find <category> <label>", "game <id>" (chooses that card, opening its series) and "type <text>" (the open keyboard), for testing on the device with screenshots.
 package main
 
 import (
@@ -58,7 +58,8 @@ type launcher struct {
 	s       state
 	games   []game
 	focus   focus
-	card    int
+	series  string // the open series' id, "" for the cards
+	card    int    // the chosen card in the row shown (shown())
 	editing bool // left/right change the chosen row's value (A on a choice or a slider) until A or B
 	cat     int
 	sel     int
@@ -175,7 +176,8 @@ func (l *launcher) press(b button) {
 	}
 	switch l.focus {
 	case fGames:
-		n := len(l.games)
+		games := l.shown()
+		n := len(games)
 		switch b {
 		case bLeft:
 			if n > 0 {
@@ -187,8 +189,10 @@ func (l *launcher) press(b button) {
 			}
 		case bA, bStart:
 			if n > 0 {
-				l.launch(l.games[l.card])
+				l.choose(games[l.card])
 			}
+		case bB, bBack:
+			l.closeSeries()
 		case bDown:
 			l.focus = fCategories
 		}
@@ -368,13 +372,7 @@ func (l *launcher) control(path string) {
 			} else if cat, label, ok := strings.Cut(strings.TrimPrefix(line, "find "), " "); ok && strings.HasPrefix(line, "find ") {
 				l.update(func() { l.find(cat, label) })
 			} else if id, ok := strings.CutPrefix(line, "game "); ok {
-				l.update(func() {
-					for i, g := range l.games {
-						if g.id == id {
-							l.focus, l.card, l.editing = fGames, i, false
-						}
-					}
-				})
+				l.update(func() { l.chooseID(id) })
 			} else if text, ok := strings.CutPrefix(line, "type "); ok {
 				l.update(func() {
 					if k, ok := l.modal.(*keyboard); ok {

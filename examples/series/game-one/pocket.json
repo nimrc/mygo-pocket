@@ -1,0 +1,9 @@
+{
+  "$schema": "../../../schema/pocket.schema.json",
+  "kind": "retroarch",
+  "title": "塞尔达传说 缩小帽",
+  "subtitle": "The Minish Cap · GBA",
+  "core": "mgba",
+  "rom": "../../../roms/gba/Zelda_Minish_Cap.gba",
+  "order": 1
+}
