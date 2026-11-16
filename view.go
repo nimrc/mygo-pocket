@@ -90,7 +90,7 @@ func (l *launcher) wallpaper(c *ui.Context, w, h float32) {
 		a = l.games[l.card].from
 	}
 	light := func(col ui.Color, x, y, size float32, key string) {
-		blob := ui.Box(c).Absolute().Left(x).Top(y).Size(size, size)
+		blob := ui.Box(c).Absolute().Left(x).Top(y).Size(size, size).IgnoreInput(true) // over the cards in hit testing otherwise: a tap went to the light
 		col = blob.AnimateColor(key, col, ui.Animation{Duration: 450 * time.Millisecond})
 		blob.RadialGradient(ui.RadialGradient{Radius: size / 2, Stops: []ui.GradientStop{
 			{Color: col.Alpha(0.75), At: 0}, {Color: col.Alpha(0.25), At: 0.45}, {Color: col.Alpha(0), At: 1}}})
@@ -197,7 +197,7 @@ func (l *launcher) gamesView(c *ui.Context, w float32) {
 				cover := g.bmp
 				// the chosen card grows by its size, not a transform: a clip or a rounded image under a transform is masked on the CPU
 				// (MyGo's raster), which took 1.4 cores while the choice moved; axis-aligned rounded rectangles stay on the GPU
-				card := ui.Box(c).Radius(22)
+				card := ui.Box(c).Radius(22).Label(g.title) // a poster has no text: the label names it to taps in tests and to screen readers
 				grow := card.Animate("grow", pick[float32](sel, 1, 0), 160*time.Millisecond)
 				k := 1 + 0.08*grow
 				card.Size(cw*k, ch*k).Opacity(0.6 + 0.4*grow)

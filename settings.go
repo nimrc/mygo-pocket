@@ -58,7 +58,7 @@ func (l *launcher) refresh(full bool) {
 	if full {
 		gs = scanGames()
 	}
-	l.win.Update(func() {
+	l.update(func() {
 		if full {
 			l.setGames(gs)
 		}
@@ -366,7 +366,7 @@ func (l *launcher) scanWifi() {
 	l.s.wifiScanning = true
 	go func() {
 		nets := scanWifi()
-		l.win.Update(func() { l.s.nets, l.s.wifiScanning = nets, false })
+		l.update(func() { l.s.nets, l.s.wifiScanning = nets, false })
 	}()
 }
 
@@ -377,7 +377,7 @@ func (l *launcher) scanBluetooth() {
 	l.s.btScanning = true
 	go func() {
 		found := scanBluetooth()
-		l.win.Update(func() { l.s.btFound, l.s.btScanning = found, false })
+		l.update(func() { l.s.btFound, l.s.btScanning = found, false })
 	}()
 }
 

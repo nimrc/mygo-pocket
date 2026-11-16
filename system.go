@@ -20,7 +20,7 @@ import (
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]|\x01|\x02`) // bluetoothctl colours its output and wraps it in readline markers
 
 // run runs a command with a deadline and returns its trimmed output (bluetoothctl can block for good without its daemon).
-func run(timeout time.Duration, name string, args ...string) string {
+var run = func(timeout time.Duration, name string, args ...string) string { // a var: the tests swap in a fake handheld
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	out, _ := exec.CommandContext(ctx, name, args...).CombinedOutput()

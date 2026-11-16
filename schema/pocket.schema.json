@@ -5,6 +5,7 @@
   "description": "pocket.json: one card on mygo-pocket's games screen. The directory holding it is the card; its name is the card's id.",
   "type": "object",
   "properties": {
+    "$schema": { "type": "string", "description": "This schema, for editors." },
     "kind": {
       "enum": ["nx2linux", "mygo", "native", "command", "retroarch"],
       "description": "nx2linux: a Switch port (nx2a-data.json beside, launch.sh at the root runs it; the default when nx2a-data.json is there). mygo: a MyGo app in the directory. native: any other program in the directory. command: a program on PATH. retroarch: one ROM run by a libretro core."

@@ -95,6 +95,21 @@ ssh root@handheld /storage/mygo-pocket/pocketctl restart
 
 A game runs as a child process, fullscreen above the launcher. The launcher reads no input until the game exits.
 
+## Tests
+
+```sh
+go test ./...
+MYGO_POCKET_SHOTS=shots go test ./...   # also saves the screens the tests pass through as PNGs
+```
+
+- **UI end to end** (`e2e_test.go`): `ui.Tester` draws the launcher in memory at the Flip 2's 1920×1080. The tests press buttons as the
+  gamepad does and tap as a finger does. They run real games from temporary card directories and drive the `MYGO_POCKET_CTL` FIFO.
+  ROCKNIX's tools are faked (`harness_test.go`): the tests check what the launcher asked of them, such as `set_setting` or
+  `systemctl reboot`, and nothing on the machine changes.
+- **Cards** (`games_test.go`): every kind, the directories that are not cards, and the examples and README manifest against the schema.
+
+CI runs them on Linux (with `-race`) and macOS, uploads the screens, and builds the linux/arm64 binary.
+
 ## Testing on the device
 
 `MYGO_POCKET_CTL=/run/mygo-pocket.ctl` is a FIFO that the launcher reads as input. It takes one of these per line:
