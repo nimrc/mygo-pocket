@@ -54,6 +54,7 @@ const (
 
 type launcher struct {
 	win     *mygo.Window
+	update  func(func()) // runs on the main thread: the window's Update, the tests' queue
 	s       state
 	games   []game
 	focus   focus
@@ -90,14 +91,14 @@ func (l *launcher) do(what string, f func() string) {
 	go func() {
 		out := f()
 		log.Printf("%s: %s", what, firstLine(out))
-		l.win.Update(func() { l.busy = ""; l.say(firstLine(out)) }) // the outcome at once; reading the whole state again takes seconds
+		l.update(func() { l.busy = ""; l.say(firstLine(out)) }) // the outcome at once; reading the whole state again takes seconds
 		w, nets := readWifi(), cachedWifi() // the lists an action changes first: the whole state takes seconds
 		bt := bluetoothOn()
 		var devs []btDevice
 		if bt {
 			devs = readBtDevices()
 		}
-		l.win.Update(func() {
+		l.update(func() {
 			if !l.s.wifiScanning {
 				l.s.wifi, l.s.nets = w, markInUse(nets, w.ssid)
 			}
@@ -124,7 +125,7 @@ func (l *launcher) launch(g game) {
 		time.Sleep(500 * time.Millisecond) // the game's last presses are not the launcher's
 		l.playing.Store(false)
 		l.refresh(true)
-		l.win.Update(func() { l.running = "" })
+		l.update(func() { l.running = "" })
 	}()
 }
 
@@ -303,7 +304,7 @@ func (l *launcher) input() {
 		}
 		last = s
 		if len(bs) > 0 {
-			l.win.Update(func() {
+			l.update(func() {
 				for _, b := range bs {
 					l.press(b)
 				}
@@ -347,11 +348,11 @@ func (l *launcher) control(path string) {
 		for sc.Scan() {
 			line := sc.Text()
 			if b, ok := buttonNames[line]; ok {
-				l.win.Update(func() { l.press(b) })
+				l.update(func() { l.press(b) })
 			} else if cat, label, ok := strings.Cut(strings.TrimPrefix(line, "find "), " "); ok && strings.HasPrefix(line, "find ") {
-				l.win.Update(func() { l.find(cat, label) })
+				l.update(func() { l.find(cat, label) })
 			} else if id, ok := strings.CutPrefix(line, "game "); ok {
-				l.win.Update(func() {
+				l.update(func() {
 					for i, g := range l.games {
 						if g.id == id {
 							l.focus, l.card, l.editing = fGames, i, false
@@ -359,7 +360,7 @@ func (l *launcher) control(path string) {
 					}
 				})
 			} else if text, ok := strings.CutPrefix(line, "type "); ok {
-				l.win.Update(func() {
+				l.update(func() {
 					if k, ok := l.modal.(*keyboard); ok {
 						k.text += text
 					}
@@ -379,6 +380,7 @@ func main() {
 	l := &launcher{zoom: readZoom(), games: scanGames()}
 	mygo.App.WhenReady(func() {
 		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
+		l.update = l.win.Update
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
 		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
 		go l.refresh(true)

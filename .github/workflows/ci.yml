@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      # The UI tests draw the launcher in memory (ui.Tester) against a fake handheld; -race slows them ~15x, so it runs on one OS only.
+      - run: go test -count=1 ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} ./...
+        env:
+          MYGO_POCKET_SHOTS: ${{ github.workspace }}/shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens-${{ matrix.os }}
+          path: shots/
+          if-no-files-found: ignore
+      - name: Build for the handheld
+        run: go build -o mygo-pocket .
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+
+  # The built launcher in its sway session (dist/sway.conf, headless) on arm64 as the handheld runs it: test/vm/smoke.sh, which
+  # test/vm/run.sh runs in a Lima VM on a Mac.
+  session:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo test/vm/deps.sh
+      - run: test/vm/build.sh build/vm/bin
+      - run: test/vm/smoke.sh build/vm/bin build/vm/out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: session-arm64
+          path: build/vm/out/
+          if-no-files-found: ignore
