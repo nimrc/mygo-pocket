@@ -2,3 +2,4 @@
 cover.jpg
 cover.png
 !*_test.go
+/build/

@@ -33,3 +33,22 @@ jobs:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: "0"
+
+  # The built launcher in its sway session (dist/sway.conf, headless) on arm64 as the handheld runs it: test/vm/smoke.sh, which
+  # test/vm/run.sh runs in a Lima VM on a Mac.
+  session:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo test/vm/deps.sh
+      - run: test/vm/build.sh build/vm/bin
+      - run: test/vm/smoke.sh build/vm/bin build/vm/out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: session-arm64
+          path: build/vm/out/
+          if-no-files-found: ignore

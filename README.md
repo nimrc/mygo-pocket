@@ -108,7 +108,17 @@ MYGO_POCKET_SHOTS=shots go test ./...   # also saves the screens the tests pass 
   `systemctl reboot`, and nothing on the machine changes.
 - **Cards** (`games_test.go`): every kind, the directories that are not cards, and the examples and README manifest against the schema.
 
-CI runs them on Linux (with `-race`) and macOS, uploads the screens, and builds the linux/arm64 binary.
+- **The session** (`test/vm/smoke.sh`): the linux/arm64 binary, built with MyGo's automation plugin (`-tags e2e`), runs in
+  `dist/sway.conf` on sway's headless backend. The output is the Flip 2's 1080×1920 panel turned 270°. The test presses through the
+  FIFO and reads the screen through `mygo-automation`. It also starts an nx2linux pack, a native app and RetroArch, which goes
+  fullscreen above the launcher. When the launcher exits, the session must end.
+
+  ```sh
+  LIMA_HOME=/path/with/space test/vm/run.sh   # on a Mac: an Ubuntu 24.04 arm64 VM in Lima, made once; screens in build/vm/out
+  ```
+
+CI runs the Go tests on Linux (with `-race`) and macOS and the session on an arm64 runner (`ubuntu-24.04-arm`). It uploads the screens
+from both.
 
 ## Testing on the device
 
