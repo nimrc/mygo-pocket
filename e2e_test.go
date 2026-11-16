@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 )
@@ -30,7 +31,7 @@ func TestGamesScreen(t *testing.T) {
 		h.press("left")
 		h.shows("SYSTEM")
 		h.press("r")
-		h.shows("网络", "↑↓ 分类")
+		h.shows("网络", pick(h.l.compact, "←→ 分类", "↑↓ 分类"))
 		h.press("l")
 		h.shows("SYSTEM")
 	})
@@ -119,7 +120,8 @@ func TestTouchLaunch(t *testing.T) {
 func TestValueNeedsA(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {
 		h := newHarness(t, p, nil, threeGames(t))
-		h.press("r", "down", "down", "a")
+		h.toCategory(2)
+		h.press("a")
 		h.shows("显示", "界面缩放", "1.5x", "A 修改")
 		h.press("down", "left")
 		if h.l.focus != fCategories || h.l.zoom != 1.5 {
@@ -147,7 +149,8 @@ func TestStickLights(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {
 		h := newHarness(t, p, nil, threeGames(t))
 		h.l.s.ledMode, h.l.s.ledBright, h.l.s.ledColor = "battery", 100, -1
-		h.press("r", "down", "down", "a")
+		h.toCategory(2)
+		h.press("a")
 		h.shows("摇杆灯", "电量")
 		h.hides("颜色")
 		h.press("down", "down", "down") // over the section title
@@ -173,7 +176,8 @@ func TestStickLights(t *testing.T) {
 func TestRebootAsksFirst(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {
 		h := newHarness(t, p, nil, threeGames(t))
-		h.press("r", "down", "down", "down", "down", "down", "a")
+		h.toCategory(5)
+		h.press("a")
 		h.shows("电源", "重启", "关机")
 		h.l.find("电源", "重启") // the rows above it are the battery's, as many as the gauge reports
 		h.tt.Frame()
@@ -244,13 +248,50 @@ func TestRescan(t *testing.T) {
 		gameDir(t, root, "aaa", map[string]any{"pocket.json": map[string]any{"kind": "command", "title": "New", "exec": []string{"true"}}})
 		pack := gameDir(t, root, "copying", map[string]any{"nx2a-data.json": map[string]any{"name": "Half"}})
 		go h.l.refresh(true)
-		h.until("the new card", func() bool { return h.tt.HasText("New") })
-		h.hides("Half")
+		h.until("the new card", func() bool { return h.hasCard("aaa") })
+		if h.hasCard("copying") {
+			t.Error("the pack is a card before its dmhost")
+		}
 		if g := h.l.games[h.l.card]; g.id != "beta" {
 			t.Errorf("chosen after the rescan: %s, want beta", g.id)
 		}
 		os.WriteFile(filepath.Join(pack, "dmhost"), nil, 0o755)
 		go h.l.refresh(true)
-		h.until("the pack's card", func() bool { return h.tt.HasText("Half") })
+		h.until("the pack's card", func() bool { return h.hasCard("copying") })
 	})
+}
+
+// TestCompact: on the RG ARC's panel the cards show three at a time around the choice, and the settings' categories are a row of icons
+// that left and right go along
+func TestCompact(t *testing.T) {
+	root := threeGames(t)
+	for _, id := range []string{"delta", "epsilon"} {
+		gameDir(t, root, id, map[string]any{"pocket.json": map[string]any{"kind": "command", "title": strings.ToUpper(id[:1]) + id[1:], "exec": []string{"true"}, "order": 3}})
+	}
+	h := newHarness(t, panels[1], nil, root)
+	if !h.l.compact {
+		t.Fatal("the 640x480 panel is not compact")
+	}
+	h.shows("Gamma", "Beta", "›")
+	h.hides("Delta", "Epsilon")
+	h.press("right", "right", "right")
+	h.shows("Alpha", "Delta", "Epsilon")
+	h.hides("Gamma")
+	h.press("r")
+	h.shows("网络", "Wi-Fi", "←→ 分类")
+	h.press("right")
+	if h.l.cat != 1 || h.l.focus != fCategories {
+		t.Fatalf("right on the categories: category %d focus %d, want 蓝牙's", h.l.cat, h.l.focus)
+	}
+	h.press("up") // nothing above the icons
+	h.press("left", "left")
+	if h.l.cat != len(categories)-1 {
+		t.Errorf("left past the first category: %d, want the last", h.l.cat)
+	}
+	h.shows("系统")
+	h.shot("settings")
+	h.press("down")
+	if h.l.focus != fRows {
+		t.Errorf("down on the categories: focus %d, want the rows", h.l.focus)
+	}
 }

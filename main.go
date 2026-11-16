@@ -73,6 +73,10 @@ type launcher struct {
 
 	slideBrightness, slideVolume, slideLED float64 // the sliders' values, following the state unless a finger moves them
 	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as mygo-pocket.ui.zoom in ROCKNIX's settings
+	compact                      bool    // a small panel's layout (view.go), as the last frame found the panel
+
+	wall    *ui.Bitmap // the wallpaper, drawn for wallKey
+	wallKey wallKey
 }
 
 // modal takes the buttons while it is open
@@ -189,6 +193,18 @@ func (l *launcher) press(b button) {
 			l.focus = fCategories
 		}
 	case fCategories:
+		if l.compact { // the categories are a row of icons
+			switch b {
+			case bLeft:
+				b = bUp
+			case bRight:
+				b = bDown
+			case bDown:
+				b = bA
+			case bUp:
+				return
+			}
+		}
 		switch b {
 		case bUp:
 			l.cat, l.sel, l.selKey = (l.cat+len(categories)-1)%len(categories), 0, ""
@@ -379,7 +395,11 @@ func main() {
 	}
 	l := &launcher{zoom: readZoom(), games: scanGames()}
 	mygo.App.WhenReady(func() {
-		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, TouchPointer: true, Content: ui.View(l.view)})
+		// Transparent on OpenGL ES (GDK_GL=gles, as Panfrost needs): GTK 3 draws an opaque GL area from a renderbuffer, which it can copy to
+		// the window only with framebuffer blits, and it finds none on ES; it then read every frame back from the GPU (glReadPixels), 150 ms a
+		// frame on the RG ARC. A transparent area's texture it draws with GL.
+		gles := strings.Contains(os.Getenv("GDK_GL"), "gles")
+		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, TouchPointer: true, Transparent: gles, Content: ui.View(l.view)})
 		l.update = l.win.Update
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
 		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
