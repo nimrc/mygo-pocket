@@ -157,9 +157,10 @@ On the RG ARC (Mali-G52, Panfrost, OpenGL ES 3.1), measured with Panfrost's per-
 - **GTK 3's read back**: an opaque `GtkGLArea` is a renderbuffer, which GTK copies to the window only with framebuffer blits; on ES it
   finds none, and read each frame back with `glReadPixels` (about 150 ms a frame). The window is transparent on ES for this.
 - **Glass**: each pane reads what is under it back and blurs it, about 25 ms of the GPU's time a pane, so a compact panel has none.
-- **MyGo's GL renderer** draws everything with its general fragment shader (13 727 instructions, one thread, 1 569 register fills on
-  the G52): a fill the window's size costs about 30 ms. Metal and Direct3D 11 specialize the shader for each `gpu.Class`; GL does not
-  yet.
+- **MyGo's GL renderer** drew everything with its general fragment shader (13 727 instructions, one thread, 1 569 register fills on
+  the G52): a fill the window's size cost about 30 ms. [nimrc/mygo#2](https://github.com/nimrc/mygo/pull/2), which `go.mod` replaces
+  MyGo with, specializes it for each `gpu.Class`, as Metal and Direct3D 11 do: moving between cards draws 192 frames in 5 s, where it
+  drew 56.
 
 ## License
 
