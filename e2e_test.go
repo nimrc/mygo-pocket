@@ -578,3 +578,17 @@ func TestJoinWifiFails(t *testing.T) {
 		t.Error("a saved network was deleted after a failed join")
 	}
 }
+
+// TestNetplayOffRejoins: a client's iwd stays disconnected after leaving the host's network; the launcher rejoins the network it was on
+// before netplay, and the strongest saved one in reach when that fails
+func TestNetplayOffRejoins(t *testing.T) {
+	sys.reset(map[string]string{"get_setting mygo-pocket.netplay.return": "Office", "con up id Office": "Error: Timeout 30 sec expired.",
+		"con show": "Home:802-11-wireless\nCafe:802-11-wireless", "dev wifi list": ":Cafe:40:WPA2\n:Home:80:WPA2",
+		"con up id Home": "Connection successfully activated"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机 · Home" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("con up id Office") || sys.ran("con up id Cafe") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}

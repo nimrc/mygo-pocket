@@ -692,6 +692,9 @@ const (
 
 var netplayModes = []string{netplayOff, netplayServe, netplayClient}
 
+// netplayReturn is the setting that keeps the network wlan0 was on before local netplay
+const netplayReturn = "mygo-pocket.netplay.return"
+
 var netplayNames = map[string]string{netplayOff: "关闭", netplayServe: "主机（开热点）", netplayClient: "加入主机"}
 
 func readNetplay() string {
@@ -718,15 +721,35 @@ func setNetplay(mode string) string {
 	if mode == netplayOff {
 		run(30*time.Second, "wifictl", "disconnect") // while wifi.adhoc.enabled is still 1: deletes NETPLAY_AP
 		setSetting("wifi.adhoc.enabled", "0")
-		// iwd rejoins a saved network by itself; nmcli device connect fails on the iwd backend, and wifictl connect would take wifi.ssid,
-		// which may be stale
-		for range 20 {
+		// A host's iwd goes back to rejoining saved networks by itself. A client's does not: NetworkManager asked it to disconnect as the
+		// profile went, which stops its autoconnect. nmcli device connect fails on the iwd backend, and wifictl connect would take
+		// wifi.ssid, which may be stale: the launcher rejoins the network it was on before, then the strongest saved one in reach.
+		for range 5 {
 			if w := readWifi(); w.ssid != "" && w.ssid != netplaySSID { // the access point's or host's network lingers a moment
 				return "已退出本地联机 · " + w.ssid
 			}
 			time.Sleep(time.Second)
 		}
-		return "已退出本地联机"
+		tried := map[string]bool{netplaySSID: true}
+		try := []string{getSetting(netplayReturn)}
+		for _, n := range cachedWifi() { // strongest first
+			if n.saved {
+				try = append(try, n.ssid)
+			}
+		}
+		for _, ssid := range try {
+			if ssid == "" || tried[ssid] {
+				continue
+			}
+			tried[ssid] = true
+			if strings.Contains(run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", ssid), "successfully activated") {
+				return "已退出本地联机 · " + ssid
+			}
+		}
+		return "已退出本地联机，没有连上保存过的 Wi-Fi"
+	}
+	if w := readWifi(); w.ssid != "" && w.ssid != netplaySSID {
+		setSetting(netplayReturn, w.ssid) // where leaving goes back to
 	}
 	id := 1
 	if mode == netplayClient {
