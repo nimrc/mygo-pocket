@@ -106,11 +106,12 @@ func toggleMute() { run(2*time.Second, "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK
 // ---- Wi-Fi (NetworkManager) ----
 
 type wifiNet struct {
-	ssid   string
-	signal int
-	secure bool
-	inUse  bool
-	saved  bool
+	ssid       string
+	signal     int
+	secure     bool
+	enterprise bool // 802.1X: an account and a password, which iwd takes from a provisioning file
+	inUse      bool
+	saved      bool
 }
 
 type wifiState struct {
@@ -157,12 +158,7 @@ func markInUse(nets []wifiNet, ssid string) []wifiNet {
 }
 
 func wifiList(rescan string, timeout time.Duration) []wifiNet {
-	saved := map[string]bool{}
-	for _, line := range strings.Split(run(3*time.Second, "nmcli", "-t", "-f", "NAME,TYPE", "con", "show"), "\n") {
-		if name, typ, ok := strings.Cut(line, ":"); ok && strings.Contains(typ, "wireless") {
-			saved[name] = true
-		}
-	}
+	saved := wifiSaved()
 	seen := map[string]bool{}
 	var nets []wifiNet
 	out := run(timeout, "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", rescan)
@@ -177,7 +173,8 @@ func wifiList(rescan string, timeout time.Duration) []wifiNet {
 		}
 		seen[ssid] = true
 		sig, _ := strconv.Atoi(f[2])
-		nets = append(nets, wifiNet{ssid: ssid, signal: sig, secure: f[3] != "" && f[3] != "--", inUse: f[0] == "*", saved: saved[ssid]})
+		nets = append(nets, wifiNet{ssid: ssid, signal: sig, secure: f[3] != "" && f[3] != "--", enterprise: strings.Contains(f[3], "802.1X"),
+			inUse: f[0] == "*", saved: saved[ssid]})
 	}
 	sort.SliceStable(nets, func(i, j int) bool { // the one in use first, then the strongest
 		if nets[i].inUse != nets[j].inUse {
@@ -188,15 +185,33 @@ func wifiList(rescan string, timeout time.Duration) []wifiNet {
 	return nets
 }
 
-// connectWifi joins a saved or open network; a new secured one needs its password (a text entry this launcher does not have yet).
+// connectWifi joins a saved or open network; when it cannot, wlan0 goes back to the network it was on
 func connectWifi(n wifiNet) string {
+	prev := readWifi().ssid
+	var out string
 	if n.saved {
-		return run(30*time.Second, "nmcli", "con", "up", "id", n.ssid)
+		out = run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", n.ssid)
+	} else {
+		out = run(45*time.Second, "nmcli", "-w", "30", "dev", "wifi", "connect", n.ssid)
 	}
-	if !n.secure {
-		return run(30*time.Second, "nmcli", "dev", "wifi", "connect", n.ssid)
+	if strings.Contains(out, "successfully activated") {
+		return "已连接 " + n.ssid
 	}
-	return "需要密码"
+	if !n.saved {
+		run(10*time.Second, "nmcli", "con", "delete", "id", n.ssid)
+	}
+	return "连接 " + n.ssid + " 失败：" + wifiError(out) + goBack(prev, n.ssid)
+}
+
+// goBack rejoins the network wlan0 was on before a join that failed, which left it on none (iwd does not go back by itself), and says so
+func goBack(prev, tried string) string {
+	if prev == "" || prev == tried {
+		return ""
+	}
+	if strings.Contains(run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", prev), "successfully activated") {
+		return "，已回到 " + prev
+	}
+	return ""
 }
 
 // ---- Bluetooth (ROCKNIX's rocknix-bluetooth starts and stops the daemon and its agent) ----
@@ -360,14 +375,16 @@ func clamp(v, lo, hi int) int { return max(lo, min(hi, v)) }
 // ---- Wi-Fi: joining with a password, forgetting ----
 
 // joinWifi joins a secured network with its password. A failed join leaves NetworkManager a profile with the wrong secret, which would
-// make the network look saved: it goes, and NetworkManager goes back to the network it had
+// make the network look saved: it goes, and wlan0 goes back to the network it was on. With iwd, a wrong password does not fail: nmcli
+// waits until its timeout.
 func joinWifi(ssid, password string) string {
-	out := run(40*time.Second, "nmcli", "dev", "wifi", "connect", ssid, "password", password)
+	prev := readWifi().ssid
+	out := run(45*time.Second, "nmcli", "-w", "30", "dev", "wifi", "connect", ssid, "password", password)
 	if strings.Contains(out, "successfully activated") {
 		return "已连接 " + ssid
 	}
 	run(10*time.Second, "nmcli", "con", "delete", "id", ssid)
-	return "连接 " + ssid + " 失败：" + wifiError(out)
+	return "连接 " + ssid + " 失败：" + wifiError(out) + goBack(prev, ssid)
 }
 
 // wifiError says why nmcli could not join, in the launcher's words
@@ -377,15 +394,127 @@ func wifiError(out string) string {
 		return "密码错误"
 	case strings.Contains(o, "no network with ssid"):
 		return "找不到这个网络，请重新扫描"
-	case strings.Contains(o, "timeout"), strings.Contains(o, "timed out"):
-		return "连接超时"
-	case out == "":
-		return "没有响应"
+	case strings.Contains(o, "timeout"), strings.Contains(o, "timed out"), out == "":
+		return "密码错误或信号太弱"
 	}
 	return firstLine(out)
 }
 
-func forgetWifi(ssid string) string { return run(10*time.Second, "nmcli", "con", "delete", "id", ssid) }
+// forgetWifi deletes the network's profile; NetworkManager has iwd forget it too, which deletes an 802.1X network's provisioning file,
+// so its copy goes as well
+func forgetWifi(ssid string) string {
+	os.Remove(filepath.Join(provisionCopies, provisionFile(ssid)))
+	out := run(10*time.Second, "nmcli", "con", "delete", "id", ssid)
+	if strings.Contains(out, "successfully deleted") {
+		return "已忘记 " + ssid
+	}
+	return out
+}
+
+// ---- Wi-Fi: 802.1X (enterprise) networks ----
+//
+// NetworkManager's iwd backend joins an 802.1X network only from iwd's provisioning file, and its profile of the network is a mirror of
+// that file in /run. iwd loses the file when it restarts (NetworkManager has it forget the network as the mirror goes), and the network
+// is gone for good. The launcher keeps a copy of each provisioning file and puts back one that went missing.
+
+var (
+	iwdState        = "/storage/.cache/iwd"
+	provisionCopies = "/storage/.config/mygo-pocket/iwd"
+)
+
+// provisionFile is iwd's file name for an 802.1X network: the SSID when it is plain, "=" and its hex otherwise
+func provisionFile(ssid string) string {
+	for _, r := range ssid {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == ' ' || r == '-' || r == '_') {
+			return fmt.Sprintf("=%x.8021x", ssid)
+		}
+	}
+	return ssid + ".8021x"
+}
+
+// joinEnterprise joins an 802.1X network with an account and a password, over PEAP with MSCHAPv2 (what most offices run), and keeps
+// a copy of its provisioning file; a failed join leaves neither
+func joinEnterprise(ssid, identity, password string) string {
+	prev := readWifi().ssid
+	f := provisionFile(ssid)
+	conf := fmt.Sprintf("[Security]\nEAP-Method=PEAP\nEAP-Identity=%s\nEAP-PEAP-Phase2-Method=MSCHAPV2\nEAP-PEAP-Phase2-Identity=%s\nEAP-PEAP-Phase2-Password=%s\n\n[Settings]\nAutoConnect=true\n",
+		identity, identity, password)
+	if err := os.WriteFile(filepath.Join(iwdState, f), []byte(conf), 0o600); err != nil {
+		return "连接 " + ssid + " 失败：" + err.Error()
+	}
+	for range 10 { // NetworkManager mirrors the new file into a profile
+		if wifiSaved()[ssid] {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	out := run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", ssid)
+	if strings.Contains(out, "successfully activated") {
+		os.MkdirAll(provisionCopies, 0o700)
+		os.WriteFile(filepath.Join(provisionCopies, f), []byte(conf), 0o600)
+		return "已连接 " + ssid
+	}
+	os.Remove(filepath.Join(iwdState, f))
+	return "连接 " + ssid + " 失败：账号或密码错误，或不是 PEAP 网络" + goBack(prev, ssid)
+}
+
+// keepProvisioning copies new or changed 802.1X provisioning files aside and puts back the ones iwd lost; it returns the networks put
+// back. inUse is the network wlan0 is on: the last 802.1X one is remembered, and when it is put back while iwd has meanwhile joined
+// another saved network, it is joined again (rejoin).
+func keepProvisioning(inUse string) (back []string, rejoin string) {
+	files, _ := filepath.Glob(filepath.Join(iwdState, "*.8021x"))
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		c := filepath.Join(provisionCopies, filepath.Base(f))
+		if old, _ := os.ReadFile(c); string(old) != string(data) {
+			os.MkdirAll(provisionCopies, 0o700)
+			os.WriteFile(c, data, 0o600)
+		}
+	}
+	last := filepath.Join(provisionCopies, ".in-use")
+	if inUse != "" && exists(filepath.Join(provisionCopies, provisionFile(inUse))) && readFile(last) != inUse {
+		os.WriteFile(last, []byte(inUse), 0o600)
+	}
+	copies, _ := filepath.Glob(filepath.Join(provisionCopies, "*.8021x"))
+	for _, c := range copies {
+		f := filepath.Join(iwdState, filepath.Base(c))
+		if exists(f) {
+			continue
+		}
+		if data, err := os.ReadFile(c); err == nil && os.WriteFile(f, data, 0o600) == nil {
+			ssid := strings.TrimSuffix(filepath.Base(c), ".8021x")
+			back = append(back, ssid)
+			if ssid == readFile(last) && ssid != inUse {
+				rejoin = ssid
+			}
+		}
+	}
+	return back, rejoin
+}
+
+// rejoinWifi joins a network put back once NetworkManager has mirrored its provisioning file
+func rejoinWifi(ssid string) string {
+	for range 10 {
+		if wifiSaved()[ssid] {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return run(60*time.Second, "nmcli", "-w", "45", "con", "up", "id", ssid)
+}
+
+func wifiSaved() map[string]bool {
+	saved := map[string]bool{}
+	for _, line := range strings.Split(run(3*time.Second, "nmcli", "-t", "-f", "NAME,TYPE", "con", "show"), "\n") {
+		if name, typ, ok := strings.Cut(line, ":"); ok && strings.Contains(typ, "wireless") {
+			saved[name] = true
+		}
+	}
+	return saved
+}
 
 // ---- Bluetooth: finding and pairing new devices ----
 
@@ -592,7 +721,7 @@ func setNetplay(mode string) string {
 		// iwd rejoins a saved network by itself; nmcli device connect fails on the iwd backend, and wifictl connect would take wifi.ssid,
 		// which may be stale
 		for range 20 {
-			if w := readWifi(); w.ssid != "" {
+			if w := readWifi(); w.ssid != "" && w.ssid != netplaySSID { // the access point's or host's network lingers a moment
 				return "已退出本地联机 · " + w.ssid
 			}
 			time.Sleep(time.Second)
@@ -607,11 +736,12 @@ func setNetplay(mode string) string {
 	setSetting("wifi.adhoc.enabled", "1")
 	setSetting("wifi.adhoc.id", strconv.Itoa(id))
 	run(150*time.Second, "wifictl", "connect") // a client scans for the host up to 30 s, then tries three times
-	if w := readWifi(); w.ssid != netplaySSID {
+	if w := readWifi(); w.ssid != netplaySSID { // back to off, so the mode shown is the network in use
+		setNetplay(netplayOff)
 		if mode == netplayServe {
-			return "热点没有开起来"
+			return "热点没有开起来，已回到 Wi-Fi"
 		}
-		return "没有找到主机的热点 " + netplaySSID
+		return "没有找到主机的热点 " + netplaySSID + "，已回到 Wi-Fi"
 	}
 	if mode == netplayServe {
 		return "热点 " + netplaySSID + " 已开启 · " + netplayHost

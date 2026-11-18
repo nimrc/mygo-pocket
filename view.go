@@ -682,10 +682,24 @@ type keyboard struct {
 	text     string
 	row, col int
 	shift    bool
+	plain    bool                // shown as typed (an account), not masked (a password)
+	check    func(string) string // why the text cannot be taken, "" when it can: the keyboard stays open with the reason
+	problem  string
 	done     func(string)
 }
 
 func newKeyboard(title string, done func(string)) *keyboard { return &keyboard{title: title, row: 1, done: done} }
+
+// finish takes the text, unless check finds a problem with it
+func (k *keyboard) finish(l *launcher) {
+	if k.check != nil {
+		if k.problem = k.check(k.text); k.problem != "" {
+			return
+		}
+	}
+	l.modal = nil
+	k.done(k.text)
+}
 
 func (k *keyboard) key(r, col int) string {
 	s := keyRows[r][col]
@@ -709,10 +723,10 @@ func (k *keyboard) typeKey(l *launcher, r, col int) {
 			k.text = k.text[:len(k.text)-1]
 		}
 	case "完成":
-		l.modal = nil
-		k.done(k.text)
+		k.finish(l)
 	default:
 		k.text += k.key(r, col)
+		k.problem = ""
 	}
 }
 
@@ -735,8 +749,7 @@ func (k *keyboard) press(l *launcher, b button) {
 			k.text = k.text[:len(k.text)-1]
 		}
 	case bStart:
-		l.modal = nil
-		k.done(k.text)
+		k.finish(l)
 	case bBack:
 		l.modal = nil
 	}
@@ -758,6 +771,9 @@ func (k *keyboard) view(l *launcher, c *ui.Context) {
 		}
 		if len(k.text) > 0 {
 			masked = masked[:len(masked)-len("•")] + k.text[len(k.text)-1:] // the last character shows
+		}
+		if k.plain {
+			masked = k.text
 		}
 		ui.Box(c).Width(kw*10+63).Padding(pick[float32](cpt, 9, 12)).Radius(14).Background(ui.RGBA(0, 0, 0, 0.30)).Border(1.5, cPrimary).Children(func() {
 			ui.Text(c, masked+"▏").FontSize(21).TextColor(cText)
@@ -788,6 +804,69 @@ func (k *keyboard) view(l *launcher, c *ui.Context) {
 				})
 			}
 		})
+		if k.problem != "" && k.check(k.text) != "" { // gone once the text is fixed
+			ui.Text(c, k.problem).FontSize(pick[float32](cpt, 16, 15)).TextColor(cDanger)
+		}
 		ui.Text(c, "A 输入    B 删除    X 大小写    + 完成    − 取消").FontSize(pick[float32](cpt, 15, 14)).TextColor(cSecondary)
+	})
+}
+
+// ---- a choice among a few, each with a line on what it does: ↑↓ choose, A takes it, B leaves things as they are ----
+
+type pickOption struct{ label, detail string }
+
+type pickBox struct {
+	title   string
+	options []pickOption
+	cur     int // the one in effect, marked
+	sel     int
+	take    func(i int)
+}
+
+func (m *pickBox) press(l *launcher, b button) {
+	switch b {
+	case bUp:
+		m.sel = (m.sel + len(m.options) - 1) % len(m.options)
+	case bDown:
+		m.sel = (m.sel + 1) % len(m.options)
+	case bA, bStart:
+		l.modal = nil
+		if m.sel != m.cur {
+			m.take(m.sel)
+		}
+	case bB, bBack:
+		l.modal = nil
+	}
+}
+
+func (m *pickBox) view(l *launcher, c *ui.Context) {
+	w, _ := c.Size()
+	cpt := l.compact
+	l.overlay(c, func() {
+		ui.Text(c, m.title).FontSize(pick[float32](cpt, 22, 25)).Bold().TextColor(cText)
+		ui.Column(c).Gap(8).Children(func() {
+			for i, o := range m.options {
+				sel := i == m.sel
+				b := ui.Column(c).Width(min(w-pick[float32](cpt, 80, 160), 620)).PaddingX(18).PaddingY(pick[float32](cpt, 9, 12)).Radius(16).Gap(3)
+				if sel {
+					l.accent(b, cPrimary)
+				} else {
+					b.Background(cSelRow)
+				}
+				b.Children(func() {
+					label := o.label
+					if i == m.cur {
+						label += "  ✓"
+					}
+					ui.Text(c, label).FontSize(pick[float32](cpt, 19, 20)).Bold().TextColor(pick(sel, cWhite, cText))
+					ui.Text(c, o.detail).FontSize(pick[float32](cpt, 14, 15)).TextColor(pick(sel, cWhite, cSecondary))
+				})
+				if b.Clicked() {
+					m.sel = i
+					m.press(l, bA)
+				}
+			}
+		})
+		ui.Text(c, "↑↓ 选择    A 确定    B 取消").FontSize(pick[float32](cpt, 15, 14)).TextColor(cSecondary)
 	})
 }

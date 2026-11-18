@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -60,6 +62,10 @@ func (l *launcher) refresh(full bool) {
 	if full {
 		gs = scanGames()
 	}
+	back, rejoin := keepProvisioning(n.wifi.ssid) // every refresh: iwd loses an 802.1X network's file when it restarts
+	if rejoin != "" {
+		go func() { log.Printf("rejoin %s: %s", rejoin, firstLine(rejoinWifi(rejoin))) }()
+	}
 	l.update(func() {
 		if full {
 			l.setGames(gs)
@@ -80,6 +86,9 @@ func (l *launcher) refresh(full bool) {
 			}
 		}
 		l.s = n
+		if len(back) > 0 {
+			l.say("已恢复 " + strings.Join(back, "、") + " 的登录配置" + pick(rejoin != "", "，正在重新连接", ""))
+		}
 	})
 }
 
@@ -151,7 +160,7 @@ var categories = []category{
 		if s.wifi.enabled {
 			cur := "未连接"
 			if s.wifi.ssid != "" {
-				cur = s.wifi.ssid + "  ·  " + s.wifi.ip
+				cur = s.wifi.ssid + "  ·  " + cmp(s.wifi.ip, "正在获取地址…")
 			}
 			rs = append(rs, info("当前网络", cur))
 			scan := fmt.Sprintf("找到 %d 个", len(s.nets))
@@ -166,6 +175,8 @@ var categories = []category{
 					state = "已连接 · " + state
 				case n.saved:
 					state = "已保存 · " + state
+				case n.enterprise:
+					state = "企业 · " + state
 				case n.secure:
 					state = "加密 · " + state
 				default:
@@ -173,20 +184,16 @@ var categories = []category{
 				}
 				r := row{kind: kAction, label: n.ssid, value: state, act: func() { l.joinWifi(n) }}
 				if n.saved {
-					r.alt, r.altLabel = func() { l.do("忘记 "+n.ssid, func() string { return forgetWifi(n.ssid) }) }, "忘记"
+					r.alt, r.altLabel = func() { l.confirm("忘记 "+n.ssid+"？", func() string { return forgetWifi(n.ssid) }) }, "忘记"
 				}
 				rs = append(rs, r)
 			}
 		}
-		rs = append(rs, header("本地联机（无网络时）"), row{kind: kChoice, label: "模式", value: netplayNames[s.netplay], adjust: func(d int) {
-				m := cycle(netplayModes, s.netplay, d)
-				if l.busy != "" {
-					l.say("请稍候：" + l.busy)
-					return
-				}
-				s.netplay = m
-				l.do("本地联机："+netplayNames[m], func() string { return setNetplay(m) })
-			}})
+		mode := netplayNames[s.netplay]
+		if s.netplay != netplayOff && s.wifi.ssid == netplaySSID {
+			mode += " · " + s.wifi.ip
+		}
+		rs = append(rs, header("本地联机（无网络时）"), row{kind: kAction, label: "模式", value: mode, act: l.pickNetplay})
 		rs = append(rs, header("网络服务"),
 			toggle("SSH 远程登录", &s.ssh, setSSH, l, "切换 SSH"),
 			toggle("Samba 文件共享", &s.samba, func(on bool) { setService("smbd", "samba.enabled", on) }, l, "切换 Samba"),
@@ -412,9 +419,42 @@ func (l *launcher) joinWifi(n wifiNet) {
 		l.do("连接 "+n.ssid, func() string { return connectWifi(n) })
 		return
 	}
-	l.modal = newKeyboard("输入 "+n.ssid+" 的密码", func(pw string) {
+	if n.enterprise {
+		user := newKeyboard(n.ssid+" 的账号", func(id string) {
+			pw := newKeyboard(n.ssid+" 的密码（"+id+"）", func(pw string) {
+				l.do("连接 "+n.ssid, func() string { return joinEnterprise(n.ssid, id, pw) })
+			})
+			pw.check = func(t string) string { return pick(t == "", "请输入密码", "") }
+			l.modal = pw
+		})
+		user.plain = true
+		user.check = func(t string) string { return pick(strings.TrimSpace(t) == "", "请输入账号，例如邮箱", "") }
+		l.modal = user
+		return
+	}
+	k := newKeyboard("输入 "+n.ssid+" 的密码", func(pw string) {
 		l.do("连接 "+n.ssid, func() string { return joinWifi(n.ssid, pw) })
 	})
+	k.check = func(t string) string { return pick(len(t) < 8, "WPA 密码至少 8 位", "") }
+	l.modal = k
+}
+
+// pickNetplay asks which local netplay mode to switch to; nothing changes until one is taken
+func (l *launcher) pickNetplay() {
+	if l.busy != "" {
+		l.say("请稍候：" + l.busy)
+		return
+	}
+	cur := slices.Index(netplayModes, l.s.netplay)
+	l.modal = &pickBox{title: "本地联机", cur: max(cur, 0), sel: max(cur, 0), options: []pickOption{
+		{netplayNames[netplayOff], "回到保存过的 Wi-Fi"},
+		{netplayNames[netplayServe], "开热点 " + netplaySSID + "，其他掌机加入；RetroArch 游戏等玩家连进来"},
+		{netplayNames[netplayClient], "连上主机的热点；RetroArch 游戏自动连到主机"},
+	}, take: func(i int) {
+		m := netplayModes[i]
+		l.s.netplay = m
+		l.do("本地联机："+netplayNames[m], func() string { return setNetplay(m) })
+	}}
 }
 
 func (l *launcher) confirm(question string, f func() string) {
