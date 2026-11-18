@@ -68,6 +68,8 @@ type launcher struct {
 	running string // the game playing, "" when none
 	playing atomic.Bool
 	behind  atomic.Bool // another window is in front (a game started outside the launcher): its presses are not the launcher's
+	active     atomic.Int64 // the last input, Unix nanoseconds: auto standby counts from it (standby.go)
+	standbyMin atomic.Int32 // 自动待机's minutes, 0 off
 	busy    string // an action in progress
 	note    string // the last action's outcome, shown for a few seconds
 	noteAt  time.Time
@@ -135,6 +137,7 @@ func (l *launcher) launch(g game) {
 		log.Printf("%s ended: %v", g.id, err)
 		time.Sleep(500 * time.Millisecond) // the game's last presses are not the launcher's
 		l.playing.Store(false)
+		l.touch() // the idle time starts when the game ends
 		l.refresh(true)
 		l.update(func() { l.running = "" })
 	}()
@@ -161,6 +164,7 @@ func (l *launcher) anchor(rows []row) []row {
 
 // press is every button press, from the gamepad or MYGO_POCKET_CTL, on the main thread
 func (l *launcher) press(b button) {
+	l.touch()
 	if l.running != "" {
 		return
 	}
@@ -310,6 +314,9 @@ func (l *launcher) input() {
 			last, held, wait = s, map[gamepad.Button]time.Time{}, true
 			continue
 		}
+		if anyPressed(s) { // any button, mapped or not, keeps the handheld awake
+			l.touch()
+		}
 		if wait { // back in front: nothing until every button the game held is up
 			if anyPressed(s) {
 				last = s
@@ -398,6 +405,8 @@ func main() {
 		}
 	}
 	l := &launcher{zoom: readZoom(), games: scanGames()}
+	l.standbyMin.Store(int32(readStandby()))
+	l.touch()
 	mygo.App.WhenReady(func() {
 		// Transparent on OpenGL ES (GDK_GL=gles, as Panfrost needs): GTK 3 draws an opaque GL area from a renderbuffer, which it can copy to
 		// the window only with framebuffer blits, and it finds none on ES; it then read every frame back from the GPU (glReadPixels), 150 ms a
@@ -421,6 +430,7 @@ func main() {
 		go func() {
 			for i := 1; ; i++ {
 				time.Sleep(2 * time.Second)
+				l.checkStandby()
 				if !l.playing.Load() {
 					l.refresh(i%15 == 0) // the slow readings every 30 s
 				}
