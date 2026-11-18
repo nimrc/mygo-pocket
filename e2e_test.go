@@ -551,7 +551,7 @@ func TestForgetWifi(t *testing.T) {
 // TestNetplayNoHost: joining finds no host's access point: local netplay goes back off, so the mode shown is the network in use
 func TestNetplayNoHost(t *testing.T) {
 	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Home\nIP4.ADDRESS[1]:10.0.0.5/24"})
-	if got := setNetplay(netplayClient); got != "没有找到主机的热点 NETPLAY_AP，已回到 Wi-Fi" {
+	if got := setNetplay(netplayClient); got != "没有连上主机的热点 NETPLAY_AP · Home" {
 		t.Errorf("setNetplay(client) = %q", got)
 	}
 	if !sys.ran(`set_setting wifi.adhoc.enabled "0"`) || !sys.ran("wifictl disconnect") {
@@ -589,6 +589,30 @@ func TestNetplayOffRejoins(t *testing.T) {
 		t.Errorf("setNetplay(off) = %q", got)
 	}
 	if !sys.ran("con up id Office") || sys.ran("con up id Cafe") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayJoinNeedsAddress: NetworkManager names NETPLAY_AP while still activating it (a failed WPA handshake never gets further);
+// without an address on the host's network the join failed, and local netplay goes back off
+func TestNetplayJoinNeedsAddress(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP"})
+	if got := setNetplay(netplayClient); !strings.HasPrefix(got, "没有连上主机的热点") {
+		t.Errorf("setNetplay(client) = %q", got)
+	}
+	if !sys.ran(`set_setting wifi.adhoc.enabled "0"`) {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayOffRadioCycle: no saved network takes wlan0 back (the rtw88 rejects every association after failed handshakes); the radio
+// goes off and on, and the saved networks are tried again
+func TestNetplayOffRadioCycle(t *testing.T) {
+	sys.reset(map[string]string{"get_setting mygo-pocket.netplay.return": "Office", "con up id Office": "Error: Connection activation failed"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机，没有连上保存过的 Wi-Fi" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("nmcli radio wifi off") || !sys.ran("nmcli radio wifi on") || sys.count("con up id Office") != 2 {
 		t.Errorf("commands %q", sys.cmds)
 	}
 }

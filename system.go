@@ -692,6 +692,27 @@ const (
 
 var netplayModes = []string{netplayOff, netplayServe, netplayClient}
 
+// rejoinSaved joins the network wlan0 was on before local netplay, then the strongest saved one in reach; it returns the one joined
+func rejoinSaved() string {
+	tried := map[string]bool{netplaySSID: true}
+	try := []string{getSetting(netplayReturn)}
+	for _, n := range cachedWifi() { // strongest first
+		if n.saved {
+			try = append(try, n.ssid)
+		}
+	}
+	for _, ssid := range try {
+		if ssid == "" || tried[ssid] {
+			continue
+		}
+		tried[ssid] = true
+		if strings.Contains(run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", ssid), "successfully activated") {
+			return ssid
+		}
+	}
+	return ""
+}
+
 // netplayReturn is the setting that keeps the network wlan0 was on before local netplay
 const netplayReturn = "mygo-pocket.netplay.return"
 
@@ -730,19 +751,21 @@ func setNetplay(mode string) string {
 			}
 			time.Sleep(time.Second)
 		}
-		tried := map[string]bool{netplaySSID: true}
-		try := []string{getSetting(netplayReturn)}
-		for _, n := range cachedWifi() { // strongest first
-			if n.saved {
-				try = append(try, n.ssid)
+		// After failed WPA handshakes with a host, the RTL8821CS (rtw88) has been seen to fail every association (status 1) until its
+		// radio is turned off and on: that is the second round.
+		for round := range 2 {
+			if round == 1 {
+				run(10*time.Second, "nmcli", "radio", "wifi", "off")
+				time.Sleep(2 * time.Second)
+				run(10*time.Second, "nmcli", "radio", "wifi", "on")
+				for range 15 { // iwd rejoins a saved network by itself after the radio comes back
+					time.Sleep(time.Second)
+					if w := readWifi(); w.ssid != "" && w.ssid != netplaySSID {
+						return "已退出本地联机 · " + w.ssid
+					}
+				}
 			}
-		}
-		for _, ssid := range try {
-			if ssid == "" || tried[ssid] {
-				continue
-			}
-			tried[ssid] = true
-			if strings.Contains(run(45*time.Second, "nmcli", "-w", "30", "con", "up", "id", ssid), "successfully activated") {
+			if ssid := rejoinSaved(); ssid != "" {
 				return "已退出本地联机 · " + ssid
 			}
 		}
@@ -759,12 +782,13 @@ func setNetplay(mode string) string {
 	setSetting("wifi.adhoc.enabled", "1")
 	setSetting("wifi.adhoc.id", strconv.Itoa(id))
 	run(150*time.Second, "wifictl", "connect") // a client scans for the host up to 30 s, then tries three times
-	if w := readWifi(); w.ssid != netplaySSID { // back to off, so the mode shown is the network in use
-		setNetplay(netplayOff)
+	// joined only with an address on the host's network: while NetworkManager is still activating NETPLAY_AP it already names it
+	if w := readWifi(); w.ssid != netplaySSID || !strings.HasPrefix(w.ip, "192.168.80.") { // back to off, so the mode shown is the network in use
+		back := strings.TrimPrefix(setNetplay(netplayOff), "已退出本地联机")
 		if mode == netplayServe {
-			return "热点没有开起来，已回到 Wi-Fi"
+			return "热点没有开起来" + back
 		}
-		return "没有找到主机的热点 " + netplaySSID + "，已回到 Wi-Fi"
+		return "没有连上主机的热点 " + netplaySSID + back
 	}
 	if mode == netplayServe {
 		return "热点 " + netplaySSID + " 已开启 · " + netplayHost
