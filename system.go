@@ -589,7 +589,14 @@ func setNetplay(mode string) string {
 	if mode == netplayOff {
 		run(30*time.Second, "wifictl", "disconnect") // while wifi.adhoc.enabled is still 1: deletes NETPLAY_AP
 		setSetting("wifi.adhoc.enabled", "0")
-		run(30*time.Second, "nmcli", "device", "connect", "wlan0") // back to a saved network; wifictl connect would take wifi.ssid, which may be stale
+		// iwd rejoins a saved network by itself; nmcli device connect fails on the iwd backend, and wifictl connect would take wifi.ssid,
+		// which may be stale
+		for range 20 {
+			if w := readWifi(); w.ssid != "" {
+				return "已退出本地联机 · " + w.ssid
+			}
+			time.Sleep(time.Second)
+		}
 		return "已退出本地联机"
 	}
 	id := 1

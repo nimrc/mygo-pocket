@@ -422,3 +422,15 @@ func TestLocalNetplay(t *testing.T) {
 		}
 	})
 }
+
+// TestNetplayOff: leaving local netplay deletes the access point's profile while the ad-hoc setting is still on, then waits for iwd to
+// rejoin a saved network (nmcli device connect fails on the iwd backend)
+func TestNetplayOff(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Home\nIP4.ADDRESS[1]:10.0.0.5/24"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机 · Home" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("wifictl disconnect") || !sys.ran(`set_setting wifi.adhoc.enabled "0"`) || sys.ran("nmcli device connect") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
