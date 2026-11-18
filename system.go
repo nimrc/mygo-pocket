@@ -544,3 +544,82 @@ func uptime() string {
 }
 
 func kernel() string { return run(2*time.Second, "uname", "-r") }
+
+// ---- local netplay: ROCKNIX's ad-hoc network (wifictl), for RetroArch netplay without a network around ----
+//
+// The host (wifi.adhoc.id 1) opens the access point NETPLAY_AP at 192.168.80.1; a client joins it as 192.168.80.<id>. The addresses are
+// static, so there is no DHCP to wait for.
+
+const (
+	netplaySSID = "NETPLAY_AP"
+	netplayHost = "192.168.80.1"
+)
+
+const (
+	netplayOff    = "off"
+	netplayServe  = "host"
+	netplayClient = "client"
+)
+
+var netplayModes = []string{netplayOff, netplayServe, netplayClient}
+
+var netplayNames = map[string]string{netplayOff: "关闭", netplayServe: "主机（开热点）", netplayClient: "加入主机"}
+
+func readNetplay() string {
+	if getSetting("wifi.adhoc.enabled") != "1" {
+		return netplayOff
+	}
+	if getSetting("wifi.adhoc.id") == "1" {
+		return netplayServe
+	}
+	return netplayClient
+}
+
+// clientID is this handheld's address on the host's network, 2–251 from its Wi-Fi MAC, so the clients of one host differ without a picker
+func clientID() int {
+	mac := readFile("/sys/class/net/wlan0/address")
+	b, err := strconv.ParseUint(mac[max(0, len(mac)-2):], 16, 8)
+	if err != nil {
+		return 2
+	}
+	return 2 + int(b)%250
+}
+
+func setNetplay(mode string) string {
+	if mode == netplayOff {
+		run(30*time.Second, "wifictl", "disconnect") // while wifi.adhoc.enabled is still 1: deletes NETPLAY_AP
+		setSetting("wifi.adhoc.enabled", "0")
+		run(30*time.Second, "nmcli", "device", "connect", "wlan0") // back to a saved network; wifictl connect would take wifi.ssid, which may be stale
+		return "已退出本地联机"
+	}
+	id := 1
+	if mode == netplayClient {
+		id = clientID()
+	}
+	setWifi(true)
+	setSetting("wifi.adhoc.enabled", "1")
+	setSetting("wifi.adhoc.id", strconv.Itoa(id))
+	run(150*time.Second, "wifictl", "connect") // a client scans for the host up to 30 s, then tries three times
+	if w := readWifi(); w.ssid != netplaySSID {
+		if mode == netplayServe {
+			return "热点没有开起来"
+		}
+		return "没有找到主机的热点 " + netplaySSID
+	}
+	if mode == netplayServe {
+		return "热点 " + netplaySSID + " 已开启 · " + netplayHost
+	}
+	return fmt.Sprintf("已加入主机 · 192.168.80.%d", id)
+}
+
+// netplayArgs are RetroArch's arguments for the mode: the host waits for players, a client connects to it
+func netplayArgs(mode string) []string {
+	nick, _ := os.Hostname()
+	switch mode {
+	case netplayServe:
+		return []string{"--host", "--nick", nick}
+	case netplayClient:
+		return []string{"--connect", netplayHost, "--nick", nick}
+	}
+	return nil
+}

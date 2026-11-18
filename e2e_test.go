@@ -375,3 +375,50 @@ func TestManyCards(t *testing.T) {
 	h.shows("C4", "C7")
 	h.hides("C1", "C3")
 }
+
+// TestLocalNetplay: 网络 → 本地联机 opens ROCKNIX's ad-hoc access point as the host, and a RetroArch card then starts RetroArch hosting;
+// as a client it connects to the host's address
+func TestLocalNetplay(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		bin, cores, out := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "args")
+		os.WriteFile(filepath.Join(bin, "retroarch"), []byte("#!/bin/sh\necho \"$@\" > "+out+"\n"), 0o755)
+		os.WriteFile(filepath.Join(cores, "snes9x_libretro.so"), nil, 0o644)
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		t.Setenv("RETROARCH_CORES", cores)
+		root := t.TempDir()
+		gameDir(t, root, "snes", map[string]any{"pocket.json": map[string]any{"kind": "retroarch", "title": "SNES", "core": "snes9x", "rom": "g.sfc"}})
+		h := newHarness(t, p, map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP\nIP4.ADDRESS[1]:192.168.80.1/24",
+			"get_setting wifi.adhoc": "1"}, root) // the refresh after the change reads the mode back
+		h.l.s.netplay = netplayOff
+		h.l.find("网络", "模式")
+		h.tt.Frame()
+		h.shows("本地联机", "模式", "关闭")
+		h.press("a", "right", "b")
+		h.until("the access point", func() bool { return h.tt.HasText("热点 NETPLAY_AP 已开启") })
+		h.shot("host")
+		for _, c := range []string{`set_setting wifi.adhoc.enabled "1"`, `set_setting wifi.adhoc.id "1"`, "wifictl connect"} {
+			if !sys.ran(c) {
+				t.Errorf("%q not run; commands %q", c, sys.cmds)
+			}
+		}
+		h.press("l")
+		play := func() string {
+			os.Remove(out)
+			h.press("a")
+			h.until("RetroArch ran", func() bool { return h.l.running == "" && exists(out) })
+			b, _ := os.ReadFile(out)
+			return strings.TrimSpace(string(b))
+		}
+		if a := play(); !strings.Contains(a, "g.sfc --host --nick") {
+			t.Errorf("host's RetroArch: %q", a)
+		}
+		h.l.s.netplay = netplayClient
+		if a := play(); !strings.Contains(a, "g.sfc --connect 192.168.80.1 --nick") {
+			t.Errorf("client's RetroArch: %q", a)
+		}
+		h.l.s.netplay = netplayOff
+		if a := play(); !strings.HasSuffix(a, "g.sfc") {
+			t.Errorf("RetroArch alone: %q", a)
+		}
+	})
+}

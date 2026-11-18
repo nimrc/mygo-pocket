@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -121,8 +122,13 @@ func (l *launcher) launch(g game) {
 	}
 	l.running, l.note = g.title, ""
 	l.playing.Store(true)
+	mode := l.s.netplay
 	go func() {
-		cmd := exec.Command(g.argv[0], g.argv[1:]...)
+		argv := g.argv
+		if g.retro {
+			argv = append(slices.Clone(argv), netplayArgs(mode)...)
+		}
+		cmd := exec.Command(argv[0], argv[1:]...)
 		cmd.Dir, cmd.Env = g.dir, append(os.Environ(), g.env...)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 		err := cmd.Run()

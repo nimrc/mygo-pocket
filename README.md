@@ -18,6 +18,9 @@ Flip 2 (Snapdragon 865, ROCKNIX).
   launcher is itself a MyGo app.
 - **System settings**:
   - Wi-Fi (scan, join with an on-screen keyboard, forget) and Bluetooth (pair, connect, forget).
+  - Local netplay with no network around: one handheld hosts ROCKNIX's ad-hoc access point (`NETPLAY_AP`, `192.168.80.1`) and the
+    others join it. While it is on, a `retroarch` card starts RetroArch with `--host` on the host and `--connect 192.168.80.1` on a
+    client, so players only pick the same game. Netplay needs the same core version and the same ROM on every handheld.
   - Brightness, volume and UI zoom (1–2×, default 1.5×, relative to a 1080p panel).
   - Analog stick lights: off, battery level or a color, at any brightness. ROCKNIX's battery mode always lights them at full
     brightness, so the launcher holds the chosen brightness every 2 s, also while a game runs.

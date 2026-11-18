@@ -19,6 +19,7 @@ type state struct {
 	signal                 int // the network in use, from the last scan
 	nets                   []wifiNet
 	wifiScanning           bool
+	netplay                string // netplayOff, netplayServe or netplayClient
 	bt                     bool
 	btDevs, btFound        []btDevice
 	btScanning             bool
@@ -52,6 +53,7 @@ func (l *launcher) refresh(full bool) {
 		n.nets = markInUse(cachedWifi(), n.wifi.ssid)
 		n.fan = readFanProfile()
 		n.timezone, n.storage, n.version, n.kernel = readTimezone(), storageFree(), osVersion(), kernel()
+		n.netplay = readNetplay()
 		n.ledMode, n.ledBright, n.ledColor = readLEDMode(), readLEDBrightness(), readLEDColor()
 	}
 	var gs []game
@@ -65,7 +67,7 @@ func (l *launcher) refresh(full bool) {
 		o := l.s
 		if !full {
 			n.btDevs, n.sinks, n.fan = o.btDevs, o.sinks, o.fan
-			n.timezone, n.storage, n.version, n.kernel = o.timezone, o.storage, o.version, o.kernel
+			n.timezone, n.storage, n.version, n.kernel, n.netplay = o.timezone, o.storage, o.version, o.kernel, o.netplay
 			n.ledMode, n.ledBright, n.ledColor = o.ledMode, o.ledBright, o.ledColor
 		}
 		if !full || o.wifiScanning {
@@ -176,6 +178,15 @@ var categories = []category{
 				rs = append(rs, r)
 			}
 		}
+		rs = append(rs, header("本地联机（无网络时）"), row{kind: kChoice, label: "模式", value: netplayNames[s.netplay], adjust: func(d int) {
+				m := cycle(netplayModes, s.netplay, d)
+				if l.busy != "" {
+					l.say("请稍候：" + l.busy)
+					return
+				}
+				s.netplay = m
+				l.do("本地联机："+netplayNames[m], func() string { return setNetplay(m) })
+			}})
 		rs = append(rs, header("网络服务"),
 			toggle("SSH 远程登录", &s.ssh, setSSH, l, "切换 SSH"),
 			toggle("Samba 文件共享", &s.samba, func(on bool) { setService("smbd", "samba.enabled", on) }, l, "切换 Samba"),
