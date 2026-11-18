@@ -122,7 +122,7 @@ type wifiState struct {
 
 func readWifi() wifiState {
 	s := wifiState{enabled: run(2*time.Second, "nmcli", "radio", "wifi") == "enabled"}
-	for _, line := range strings.Split(run(2*time.Second, "nmcli", "-t", "-f", "GENERAL.CONNECTION,IP4.ADDRESS", "dev", "show", "wlan0"), "\n") {
+	for _, line := range strings.Split(run(2*time.Second, "nmcli", "-t", "-f", "GENERAL.CONNECTION,IP4.ADDRESS", "dev", "show", wifiDev()), "\n") {
 		k, v, _ := strings.Cut(line, ":")
 		switch {
 		case k == "GENERAL.CONNECTION" && v != "--":
@@ -132,6 +132,15 @@ func readWifi() wifiState {
 		}
 	}
 	return s
+}
+
+// wifiDev is the Wi-Fi interface: wlan0, unless its driver was reloaded and the kernel named it anew (as wifictl, the first wlan*)
+func wifiDev() string {
+	if m, _ := filepath.Glob("/sys/class/net/wlan*"); len(m) > 0 {
+		sort.Strings(m)
+		return filepath.Base(m[0])
+	}
+	return "wlan0"
 }
 
 func setWifi(on bool) {
@@ -730,7 +739,7 @@ func readNetplay() string {
 
 // clientID is this handheld's address on the host's network, 2–251 from its Wi-Fi MAC, so the clients of one host differ without a picker
 func clientID() int {
-	mac := readFile("/sys/class/net/wlan0/address")
+	mac := readFile("/sys/class/net/" + wifiDev() + "/address")
 	b, err := strconv.ParseUint(mac[max(0, len(mac)-2):], 16, 8)
 	if err != nil {
 		return 2
