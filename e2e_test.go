@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"os"
 	"strings"
 	"path/filepath"
@@ -614,5 +615,14 @@ func TestNetplayOffRadioCycle(t *testing.T) {
 	}
 	if !sys.ran("nmcli radio wifi off") || !sys.ran("nmcli radio wifi on") || sys.count("con up id Office") != 2 {
 		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayHostAddressLate: the access point's address comes a moment after wifictl returns; hosting waits for it
+func TestNetplayHostAddressLate(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP"})
+	go func() { time.Sleep(2 * time.Second); sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP\nIP4.ADDRESS[1]:192.168.80.1/24"}) }()
+	if got := setNetplay(netplayServe); got != "热点 NETPLAY_AP 已开启 · 192.168.80.1" {
+		t.Errorf("setNetplay(host) = %q", got)
 	}
 }

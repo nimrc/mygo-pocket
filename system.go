@@ -782,8 +782,15 @@ func setNetplay(mode string) string {
 	setSetting("wifi.adhoc.enabled", "1")
 	setSetting("wifi.adhoc.id", strconv.Itoa(id))
 	run(150*time.Second, "wifictl", "connect") // a client scans for the host up to 30 s, then tries three times
-	// joined only with an address on the host's network: while NetworkManager is still activating NETPLAY_AP it already names it
-	if w := readWifi(); w.ssid != netplaySSID || !strings.HasPrefix(w.ip, "192.168.80.") { // back to off, so the mode shown is the network in use
+	// joined only with an address on the host's network: while NetworkManager is still activating NETPLAY_AP it already names it, and
+	// the access point's own address comes a moment after it starts
+	in := func(w wifiState) bool { return w.ssid == netplaySSID && strings.HasPrefix(w.ip, "192.168.80.") }
+	w := readWifi()
+	for i := 0; i < 10 && !in(w); i++ {
+		time.Sleep(time.Second)
+		w = readWifi()
+	}
+	if !in(w) { // back to off, so the mode shown is the network in use
 		back := strings.TrimPrefix(setNetplay(netplayOff), "已退出本地联机")
 		if mode == netplayServe {
 			return "热点没有开起来" + back
