@@ -116,6 +116,38 @@ func TestTouchLaunch(t *testing.T) {
 	})
 }
 
+// TestSliderDrag: a finger drags a slider, through Touches, as the backend's gesture only taps and scrolls
+func TestSliderDrag(t *testing.T) {
+	onPanels(t, true, func(t *testing.T, p panel) {
+		h := newHarness(t, p, nil, threeGames(t))
+		h.click("设置")
+		h.click("声音")
+		r, ok := h.tt.Find("音量滑块")
+		if !ok {
+			t.Fatalf("no volume slider; texts %q", h.tt.Texts())
+		}
+		y := r.Y + r.H/2
+		for _, step := range []struct {
+			name string
+			do   func()
+			want int
+		}{
+			{"lands in the middle", func() { h.tt.TouchDown(1, r.X+r.W/2, y) }, 50},
+			{"drags past the end", func() { h.tt.TouchMove(1, r.X+r.W+40, y) }, 100},
+			{"drags to the start", func() { h.tt.TouchMove(1, r.X, y) }, 0},
+		} {
+			step.do()
+			h.tt.Frame()
+			if h.l.s.volume != step.want {
+				t.Fatalf("%s: volume %d, want %d", step.name, h.l.s.volume, step.want)
+			}
+		}
+		h.tt.TouchUp(1, r.X, y)
+		h.tt.Frame()
+		h.until("the volume is set", func() bool { return sys.ran(`set-volume @DEFAULT_AUDIO_SINK@ 0%`) })
+	})
+}
+
 // TestValueNeedsA: in a row of settings left is back; a value changes only after A, and A or B is done with it
 func TestValueNeedsA(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {

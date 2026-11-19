@@ -535,7 +535,8 @@ func (l *launcher) rowView(c *ui.Context, r row, i int, sliderW float32) {
 				}
 			})
 		case kSlider:
-			if ui.Slider(c, r.slider, 0, 100).Width(sliderW).Changed() {
+			s := ui.Slider(c, r.slider, 0, 100).Width(sliderW).Label(r.label + "滑块")
+			if s.Changed() || dragSlider(s, r.slider, sliderW) {
 				l.sel, l.selKey = i, r.id()
 				r.set(int(*r.slider + 0.5))
 			}
@@ -790,4 +791,23 @@ func (k *keyboard) view(l *launcher, c *ui.Context) {
 		})
 		ui.Text(c, "A 输入    B 删除    X 大小写    + 完成    − 取消").FontSize(pick[float32](cpt, 15, 14)).TextColor(cSecondary)
 	})
+}
+
+// sliderKnob is the width of a Slider's knob (the theme's Space(5)), whose middle stops half of it in from each end.
+var sliderKnob = ui.DarkTheme().Space(5)
+
+// dragSlider moves a 0-100 slider w wide to the finger on it, reporting whether it moved. The fingers' own gesture taps and scrolls; a slider
+// follows a finger only through Touches.
+func dragSlider(s ui.Element, v *float64, w float32) bool {
+	moved := false
+	for _, t := range s.Touches() {
+		if t.Phase != ui.TouchBegan && t.Phase != ui.TouchMoved {
+			continue
+		}
+		x := float64(max(0, min(1, (t.X-sliderKnob/2)/(w-sliderKnob)))) * 100
+		if x != *v {
+			*v, moved = x, true
+		}
+	}
+	return moved
 }

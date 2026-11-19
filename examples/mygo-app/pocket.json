@@ -2,6 +2,5 @@
   "$schema": "../../schema/pocket.schema.json",
   "kind": "mygo",
   "title": "My MyGo App",
-  "exec": ["my-app"],
-  "env": { "MYGO_TOUCH_POINTER": "1" }
+  "exec": ["my-app"]
 }

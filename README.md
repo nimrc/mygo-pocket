@@ -25,8 +25,8 @@ Flip 2 (Snapdragon 865, ROCKNIX).
   - SSH, Samba and Syncthing on/off; reboot and power off.
 
   These go through ROCKNIX's own tools and `set_setting`, so they hold across reboots.
-- **Gamepad and touch**: d-pad, A, B, X and L/R, or a tap. A finger drags a slider; this uses the `TouchPointer` window option from
-  [nimrc/mygo](https://github.com/nimrc/mygo), which `go.mod` replaces MyGo with.
+- **Gamepad and touch**: d-pad, A, B, X and L/R, or a tap. A finger scrolls a list and drags a slider
+  (`Element.Touches`).
 
 ## Cards
 
