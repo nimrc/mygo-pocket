@@ -28,7 +28,12 @@ var sys = &fakeHandheld{}
 
 func TestMain(m *testing.M) {
 	run = sys.run
-	os.Exit(m.Run())
+	dir, _ := os.MkdirTemp("", "mygo-pocket-iwd")
+	iwdState, provisionCopies = filepath.Join(dir, "iwd"), filepath.Join(dir, "copies")
+	os.MkdirAll(iwdState, 0o700)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 func (f *fakeHandheld) run(_ time.Duration, name string, args ...string) string {

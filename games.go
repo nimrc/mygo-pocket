@@ -62,6 +62,7 @@ type game struct {
 	bmp                      *ui.Bitmap
 	order                    int
 	children                 []game // a series' cards
+	retro                    bool   // RetroArch runs it: it takes the netplay arguments
 }
 
 func gameRoots() []string {
@@ -146,7 +147,7 @@ func readGame(root, dir string, series bool) (game, bool) {
 			return fail(fmt.Sprintf("core %q not found or no rom", m.Core))
 		}
 		g.tag = cmp(g.tag, "RETRO · "+strings.ToUpper(m.Core))
-		g.argv = []string{"retroarch", "-L", core, filepath.Join(dir, m.ROM)}
+		g.argv, g.retro = []string{"retroarch", "-L", core, filepath.Join(dir, m.ROM)}, true
 	case "series":
 		if !series {
 			return fail("a series in a series")

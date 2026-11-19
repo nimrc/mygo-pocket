@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"os"
 	"strings"
 	"path/filepath"
@@ -230,7 +231,7 @@ func TestRebootAsksFirst(t *testing.T) {
 // TestJoinWifi: a secured network asks for its password on the keyboard, then joins with it
 func TestJoinWifi(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {
-		h := newHarness(t, p, map[string]string{"nmcli dev wifi connect": "Device 'wlan0' successfully activated"}, threeGames(t))
+		h := newHarness(t, p, map[string]string{"dev wifi connect": "Device 'wlan0' successfully activated"}, threeGames(t))
 		h.l.s.wifi.enabled = true
 		h.l.s.nets = []wifiNet{{ssid: "Home", secure: true, signal: 80}}
 		h.l.find("网络", "Home")
@@ -238,12 +239,12 @@ func TestJoinWifi(t *testing.T) {
 		h.press("a")
 		h.shows("输入 Home 的密码")
 		h.press("a", "right", "a", "x", "a", "b") // q, w, shift W, erase it
-		h.l.modal.(*keyboard).text += "-pw"
+		h.l.modal.(*keyboard).text += "-pw1234"
 		h.tt.Frame()
 		h.shot("keyboard")
 		h.press("start")
 		h.until("joined", func() bool { return h.tt.HasText("已连接 Home") })
-		if !sys.ran("nmcli dev wifi connect Home password qw-pw") {
+		if !sys.ran("dev wifi connect Home password qw-pw1234") {
 			t.Errorf("commands %q", sys.cmds)
 		}
 	})
@@ -406,4 +407,254 @@ func TestManyCards(t *testing.T) {
 	h.press("right", "right", "right", "right", "right")
 	h.shows("C4", "C7")
 	h.hides("C1", "C3")
+}
+
+// TestLocalNetplay: 网络 → 本地联机 opens ROCKNIX's ad-hoc access point as the host, and a RetroArch card then starts RetroArch hosting;
+// as a client it connects to the host's address
+func TestLocalNetplay(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		bin, cores, out := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "args")
+		os.WriteFile(filepath.Join(bin, "retroarch"), []byte("#!/bin/sh\necho \"$@\" > "+out+"\n"), 0o755)
+		os.WriteFile(filepath.Join(cores, "snes9x_libretro.so"), nil, 0o644)
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		t.Setenv("RETROARCH_CORES", cores)
+		root := t.TempDir()
+		gameDir(t, root, "snes", map[string]any{"pocket.json": map[string]any{"kind": "retroarch", "title": "SNES", "core": "snes9x", "rom": "g.sfc"}})
+		h := newHarness(t, p, map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP\nIP4.ADDRESS[1]:192.168.80.1/24",
+			"get_setting wifi.adhoc": "1"}, root) // the refresh after the change reads the mode back
+		h.l.s.netplay = netplayOff
+		h.l.find("网络", "模式")
+		h.tt.Frame()
+		h.shows("本地联机", "模式", "关闭")
+		h.press("a")
+		h.shows("主机（开热点）", "加入主机", "回到保存过的 Wi-Fi")
+		h.shot("picker")
+		h.press("down", "b") // B leaves it as it is
+		if sys.ran("wifictl") || h.l.modal != nil {
+			t.Fatalf("B on the picker changed the mode: %q", sys.cmds)
+		}
+		h.press("a", "down", "a")
+		h.until("the access point", func() bool { return h.tt.HasText("热点 NETPLAY_AP 已开启") })
+		h.shot("host")
+		for _, c := range []string{`set_setting wifi.adhoc.enabled "1"`, `set_setting wifi.adhoc.id "1"`, "wifictl connect"} {
+			if !sys.ran(c) {
+				t.Errorf("%q not run; commands %q", c, sys.cmds)
+			}
+		}
+		h.press("l")
+		play := func() string {
+			os.Remove(out)
+			h.press("a")
+			h.until("RetroArch ran", func() bool { return h.l.running == "" && exists(out) })
+			b, _ := os.ReadFile(out)
+			return strings.TrimSpace(string(b))
+		}
+		if a := play(); !strings.Contains(a, "g.sfc --host --nick") {
+			t.Errorf("host's RetroArch: %q", a)
+		}
+		h.l.s.netplay = netplayClient
+		if a := play(); !strings.Contains(a, "g.sfc --connect 192.168.80.1 --nick") {
+			t.Errorf("client's RetroArch: %q", a)
+		}
+		h.l.s.netplay = netplayOff
+		if a := play(); !strings.HasSuffix(a, "g.sfc") {
+			t.Errorf("RetroArch alone: %q", a)
+		}
+	})
+}
+
+// TestNetplayOff: leaving local netplay deletes the access point's profile while the ad-hoc setting is still on, then waits for iwd to
+// rejoin a saved network (nmcli device connect fails on the iwd backend)
+func TestNetplayOff(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Home\nIP4.ADDRESS[1]:10.0.0.5/24"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机 · Home" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("wifictl disconnect") || !sys.ran(`set_setting wifi.adhoc.enabled "0"`) || sys.ran("nmcli device connect") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestEnterpriseWifi: an 802.1X network asks for an account (shown as typed) and then a password, and writes iwd's provisioning file;
+// an empty account is refused on the keyboard
+func TestEnterpriseWifi(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		f := filepath.Join(iwdState, "Office Net.8021x")
+		t.Cleanup(func() { os.Remove(f); os.Remove(filepath.Join(provisionCopies, "Office Net.8021x")) })
+		h := newHarness(t, p, map[string]string{"con up id Office Net": "Connection successfully activated", "con show": "Office Net:802-11-wireless"}, threeGames(t))
+		h.l.s.wifi.enabled = true
+		h.l.s.nets = []wifiNet{{ssid: "Office Net", secure: true, enterprise: true, signal: 70}}
+		h.l.find("网络", "Office Net")
+		h.tt.Frame()
+		h.shows("企业 · 信号 70%")
+		h.press("a")
+		h.shows("Office Net 的账号")
+		h.press("start")
+		h.shows("请输入账号，例如邮箱")
+		h.l.modal.(*keyboard).text = "me@office.example"
+		h.tt.Frame()
+		h.shows("me@office.example") // an account is not masked
+		h.shot("account")
+		h.press("start")
+		h.shows("Office Net 的密码（me@office.example）")
+		h.l.modal.(*keyboard).text = "s3cret"
+		h.press("start")
+		h.until("joined", func() bool { return h.tt.HasText("已连接 Office Net") })
+		data, err := os.ReadFile(f)
+		if err != nil || !strings.Contains(string(data), "EAP-Identity=me@office.example") || !strings.Contains(string(data), "EAP-PEAP-Phase2-Password=s3cret") {
+			t.Errorf("provisioning file: %q, %v", data, err)
+		}
+		if !exists(filepath.Join(provisionCopies, "Office Net.8021x")) {
+			t.Error("no copy of the provisioning file")
+		}
+	})
+}
+
+// TestKeepProvisioning: an 802.1X provisioning file iwd lost (it forgets them when it restarts) comes back from the launcher's copy at
+// the next full refresh, with a note; one forgotten in the launcher stays gone
+func TestKeepProvisioning(t *testing.T) {
+	f := filepath.Join(iwdState, "Meshy AI.8021x")
+	os.WriteFile(f, []byte("[Security]\nEAP-Method=PEAP\n"), 0o600)
+	t.Cleanup(func() { os.Remove(f); os.RemoveAll(provisionCopies) })
+	h := newHarness(t, panels[1], nil, threeGames(t))
+	go h.l.refresh(true)
+	h.until("the copy", func() bool { return exists(filepath.Join(provisionCopies, "Meshy AI.8021x")) })
+	os.Remove(f) // iwd restarted
+	go h.l.refresh(true)
+	h.until("put back", func() bool { return exists(f) && h.tt.HasText("已恢复 Meshy AI 的登录配置") })
+	forgetWifi("Meshy AI")
+	os.Remove(f) // NetworkManager had iwd forget it
+	if back, _ := keepProvisioning(""); len(back) != 0 || exists(f) {
+		t.Errorf("a forgotten network came back: %v", back)
+	}
+}
+
+// TestRejoinProvisioned: iwd restarted, lost the 802.1X network in use and joined another saved one; the network put back is joined again
+func TestRejoinProvisioned(t *testing.T) {
+	f := filepath.Join(iwdState, "Meshy AI.8021x")
+	os.WriteFile(f, []byte("[Security]\nEAP-Method=PEAP\n"), 0o600)
+	t.Cleanup(func() { os.Remove(f); os.RemoveAll(provisionCopies) })
+	sys.reset(map[string]string{"con show": "Meshy AI:802-11-wireless"})
+	if back, again := keepProvisioning("Meshy AI"); len(back) != 0 || again != "" {
+		t.Fatalf("nothing lost yet: %v %q", back, again)
+	}
+	os.Remove(f)
+	back, again := keepProvisioning("Guest") // iwd joined Guest meanwhile
+	if len(back) != 1 || again != "Meshy AI" || !exists(f) {
+		t.Errorf("put back %v, rejoin %q", back, again)
+	}
+	os.Remove(f)
+	if _, again := keepProvisioning(""); again != "Meshy AI" {
+		t.Errorf("not connected at all: rejoin %q", again)
+	}
+}
+
+// TestForgetWifi asks before forgetting a saved network, and a WPA password under 8 characters is refused on the keyboard
+func TestForgetWifi(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		h := newHarness(t, p, map[string]string{"con delete": "Connection 'Home' (x) successfully deleted."}, threeGames(t))
+		h.l.s.wifi.enabled = true
+		h.l.s.nets = []wifiNet{{ssid: "Home", secure: true, saved: true, signal: 80}, {ssid: "Cafe", secure: true, signal: 50}}
+		h.l.find("网络", "Home")
+		h.tt.Frame()
+		h.shows("X 忘记")
+		h.press("x")
+		h.shows("忘记 Home？")
+		h.press("a") // cancel is chosen first
+		if sys.ran("con delete") {
+			t.Fatal("forgot without confirming")
+		}
+		h.press("x", "right", "a")
+		h.until("forgotten", func() bool { return h.tt.HasText("已忘记 Home") })
+		h = newHarness(t, p, nil, threeGames(t))
+		h.l.s.wifi.enabled = true
+		h.l.s.nets = []wifiNet{{ssid: "Cafe", secure: true, signal: 50}}
+		h.l.find("网络", "Cafe")
+		h.tt.Frame()
+		h.press("a")
+		h.l.modal.(*keyboard).text = "short"
+		h.press("start")
+		h.shows("WPA 密码至少 8 位")
+		if sys.ran("wifi connect Cafe") {
+			t.Error("joined with a short password")
+		}
+	})
+}
+
+// TestNetplayNoHost: joining finds no host's access point: local netplay goes back off, so the mode shown is the network in use
+func TestNetplayNoHost(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Home\nIP4.ADDRESS[1]:10.0.0.5/24"})
+	if got := setNetplay(netplayClient); got != "没有连上主机的热点 NETPLAY_AP · Home" {
+		t.Errorf("setNetplay(client) = %q", got)
+	}
+	if !sys.ran(`set_setting wifi.adhoc.enabled "0"`) || !sys.ran("wifictl disconnect") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestJoinWifiFails: with iwd a wrong password is a timeout; the profile it left goes, and wlan0 goes back to the network it was on
+func TestJoinWifiFails(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Office", "dev wifi connect": "Error: Timeout 30 sec expired.",
+		"con up id Office": "Connection successfully activated"})
+	if got := joinWifi("Cafe", "wrongpass1"); got != "连接 Cafe 失败：密码错误或信号太弱，已回到 Office" {
+		t.Errorf("joinWifi = %q", got)
+	}
+	if !sys.ran("con delete id Cafe") || !sys.ran("con up id Office") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:Office", "con up id Cafe": "Error: Timeout 30 sec expired.",
+		"con up id Office": "Connection successfully activated"})
+	if got := connectWifi(wifiNet{ssid: "Cafe", secure: true, saved: true}); got != "连接 Cafe 失败：密码错误或信号太弱，已回到 Office" {
+		t.Errorf("connectWifi = %q", got)
+	}
+	if sys.ran("con delete") {
+		t.Error("a saved network was deleted after a failed join")
+	}
+}
+
+// TestNetplayOffRejoins: a client's iwd stays disconnected after leaving the host's network; the launcher rejoins the network it was on
+// before netplay, and the strongest saved one in reach when that fails
+func TestNetplayOffRejoins(t *testing.T) {
+	sys.reset(map[string]string{"get_setting mygo-pocket.netplay.return": "Office", "con up id Office": "Error: Timeout 30 sec expired.",
+		"con show": "Home:802-11-wireless\nCafe:802-11-wireless", "dev wifi list": ":Cafe:40:WPA2\n:Home:80:WPA2",
+		"con up id Home": "Connection successfully activated"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机 · Home" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("con up id Office") || sys.ran("con up id Cafe") {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayJoinNeedsAddress: NetworkManager names NETPLAY_AP while still activating it (a failed WPA handshake never gets further);
+// without an address on the host's network the join failed, and local netplay goes back off
+func TestNetplayJoinNeedsAddress(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP"})
+	if got := setNetplay(netplayClient); !strings.HasPrefix(got, "没有连上主机的热点") {
+		t.Errorf("setNetplay(client) = %q", got)
+	}
+	if !sys.ran(`set_setting wifi.adhoc.enabled "0"`) {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayOffRadioCycle: no saved network takes wlan0 back (the rtw88 rejects every association after failed handshakes); the radio
+// goes off and on, and the saved networks are tried again
+func TestNetplayOffRadioCycle(t *testing.T) {
+	sys.reset(map[string]string{"get_setting mygo-pocket.netplay.return": "Office", "con up id Office": "Error: Connection activation failed"})
+	if got := setNetplay(netplayOff); got != "已退出本地联机，没有连上保存过的 Wi-Fi" {
+		t.Errorf("setNetplay(off) = %q", got)
+	}
+	if !sys.ran("nmcli radio wifi off") || !sys.ran("nmcli radio wifi on") || sys.count("con up id Office") != 2 {
+		t.Errorf("commands %q", sys.cmds)
+	}
+}
+
+// TestNetplayHostAddressLate: the access point's address comes a moment after wifictl returns; hosting waits for it
+func TestNetplayHostAddressLate(t *testing.T) {
+	sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP"})
+	go func() { time.Sleep(2 * time.Second); sys.reset(map[string]string{"dev show wlan0": "GENERAL.CONNECTION:NETPLAY_AP\nIP4.ADDRESS[1]:192.168.80.1/24"}) }()
+	if got := setNetplay(netplayServe); got != "热点 NETPLAY_AP 已开启 · 192.168.80.1" {
+		t.Errorf("setNetplay(host) = %q", got)
+	}
 }
