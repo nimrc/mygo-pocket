@@ -162,9 +162,14 @@ func (l *launcher) anchor(rows []row) []row {
 	return rows
 }
 
-// press is every button press, from the gamepad or MYGO_POCKET_CTL, on the main thread
+// press is a button press from MYGO_POCKET_CTL, on the main thread: input
 func (l *launcher) press(b button) {
 	l.touch()
+	l.act(b)
+}
+
+// act does what a button does, on the main thread. The gamepad's presses come here directly: its input loop marks the idle time itself.
+func (l *launcher) act(b button) {
 	if l.running != "" {
 		return
 	}
@@ -314,7 +319,7 @@ func (l *launcher) input() {
 			last, held, wait = s, map[gamepad.Button]time.Time{}, true
 			continue
 		}
-		if anyPressed(s) { // any button, mapped or not, keeps the handheld awake
+		if newPress(last, s) {
 			l.touch()
 		}
 		if wait { // back in front: nothing until every button the game held is up
@@ -339,7 +344,7 @@ func (l *launcher) input() {
 		if len(bs) > 0 {
 			l.update(func() {
 				for _, b := range bs {
-					l.press(b)
+					l.act(b)
 				}
 			})
 		}
@@ -442,12 +447,20 @@ func main() {
 	}
 }
 
-// anyPressed tells whether a button is held (a trigger past its press point counts; its noise at rest does not)
-func anyPressed(s gamepad.State) bool {
+// pressed is the set of buttons held, a bit each
+func pressed(s gamepad.State) uint32 {
+	var m uint32
 	for i := range s.Buttons {
 		if s.Pressed(gamepad.Button(i)) {
-			return true
+			m |= 1 << i
 		}
 	}
-	return false
+	return m
 }
+
+// newPress tells whether a button went down since last, mapped or not: that is input. A button stuck down (a pad pressed against something)
+// is not, or the handheld would never go to standby.
+func newPress(last, s gamepad.State) bool { return pressed(s)&^pressed(last) != 0 }
+
+// anyPressed tells whether a button is held (a trigger past its press point counts; its noise at rest does not)
+func anyPressed(s gamepad.State) bool { return pressed(s) != 0 }

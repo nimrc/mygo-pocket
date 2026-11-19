@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/plugins/game/gamepad"
 )
 
 // TestStandbyRow: 电源 → 自动待机 shows the minutes and steps through the choices, keeping them in ROCKNIX's settings
@@ -73,5 +75,27 @@ func TestAutoStandby(t *testing.T) {
 	check()
 	if slept.Load() != 1 {
 		t.Errorf("standby again during a fake suspend: %d", slept.Load())
+	}
+}
+
+func TestNewPress(t *testing.T) {
+	var rest, down, downA, trig gamepad.State
+	down.Buttons[gamepad.Down] = 1
+	downA.Buttons[gamepad.Down], downA.Buttons[gamepad.East] = 1, 1
+	trig.Buttons[gamepad.Down], trig.Buttons[gamepad.RightTrigger] = 1, 0.05 // a trigger's noise at rest
+	for _, c := range []struct {
+		name    string
+		last, s gamepad.State
+		want    bool
+	}{
+		{"press", rest, down, true},
+		{"stuck down", down, down, false},
+		{"trigger noise while stuck", down, trig, false},
+		{"another press while stuck", down, downA, true},
+		{"release", down, rest, false},
+	} {
+		if got := newPress(c.last, c.s); got != c.want {
+			t.Errorf("%s: newPress = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
