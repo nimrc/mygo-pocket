@@ -3,7 +3,7 @@ module github.com/nimrc/mygo-pocket
 go 1.27.4
 
 require (
-	github.com/egoist/mygo v0.9.0
+	github.com/egoist/mygo v0.10.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 )
 
@@ -14,5 +14,3 @@ require (
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
-
-replace github.com/egoist/mygo => github.com/nimrc/mygo v0.0.0-20261116092411-eb3e80924d07

@@ -3,7 +3,7 @@
 //
 // Gamepad: L/R switch between Games and Settings. Games: left/right choose, A starts (or opens a series, B back out). Settings: the category list on the left (up/down,
 // right or A enters it), its rows on the right (up/down choose, left/right change, A does, X the row's second action, B back). Touch: a tap
-// does what A does, a finger drags a slider (MYGO_TOUCH_POINTER). A game runs as a child process, fullscreen above the launcher; the
+// does what A does, a finger drags a slider (dragSlider) and scrolls a list. A game runs as a child process, fullscreen above the launcher; the
 // launcher reads no input while it runs.
 //
 // MYGO_POCKET_CTL=<path>: a FIFO of button names (up down left right a b x l r start back), one a line, pressed as the gamepad presses them,
@@ -412,7 +412,7 @@ func main() {
 		// the window only with framebuffer blits, and it finds none on ES; it then read every frame back from the GPU (glReadPixels), 150 ms a
 		// frame on the RG ARC. A transparent area's texture it draws with GL.
 		gles := strings.Contains(os.Getenv("GDK_GL"), "gles")
-		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, TouchPointer: true, Transparent: gles, Content: ui.View(l.view)})
+		l.win = mygo.NewWindow(mygo.WindowOptions{Title: "mygo-pocket", Frameless: true, Maximized: true, Transparent: gles, Content: ui.View(l.view)})
 		l.update = l.win.Update
 		l.win.OnBlur(func() { l.behind.Store(true); log.Print("behind another window: gamepad ignored") })
 		l.win.OnFocus(func() { l.behind.Store(false); log.Print("in front: gamepad read") })
