@@ -345,6 +345,7 @@ var categories = []category{
 		}
 		return append(rs,
 			header("电源"),
+			choice("自动待机", standbyName(int(l.standbyMin.Load())), l.setStandby),
 			row{kind: kAction, label: "重启", act: func() { l.confirm("重启掌机？", func() string { return run(10*time.Second, "systemctl", "reboot") }) }},
 			row{kind: kAction, label: "关机", danger: true, act: func() { l.confirm("关机？", func() string { return run(10*time.Second, "systemctl", "poweroff") }) }},
 		)
