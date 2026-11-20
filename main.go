@@ -77,6 +77,7 @@ type launcher struct {
 
 	slideBrightness, slideVolume, slideLED float64 // the sliders' values, following the state unless a finger moves them
 	zoom                         float32 // the view's zoom (显示 → 界面缩放), kept as mygo-pocket.ui.zoom in ROCKNIX's settings
+	cardShape                    int // the cards' shape, an index in cardShapes (显示 → 卡片比例), kept as mygo-pocket.ui.card
 	compact                      bool    // a small panel's layout (view.go), as the last frame found the panel
 
 	wall    *ui.Bitmap // the wallpaper, drawn for wallKey
@@ -409,7 +410,7 @@ func main() {
 			time.AfterFunc(20*time.Second, func() { pprof.StopCPUProfile(); f.Close(); log.Printf("profile written to %s", path) })
 		}
 	}
-	l := &launcher{zoom: readZoom(), games: scanGames()}
+	l := &launcher{zoom: readZoom(), cardShape: readCardShape(), games: scanGames()}
 	l.standbyMin.Store(int32(readStandby()))
 	l.touch()
 	mygo.App.WhenReady(func() {
