@@ -243,6 +243,10 @@ var categories = []category{
 				l.zoom = zooms[clamp(i+d, 0, len(zooms)-1)]
 				go setSetting("mygo-pocket.ui.zoom", fmt.Sprint(l.zoom))
 			}),
+			choice("卡片比例", cardShapes[l.cardShape].String(), func(d int) {
+				l.cardShape = clamp(l.cardShape+d, 0, len(cardShapes)-1)
+				go setSetting("mygo-pocket.ui.card", cardShapes[l.cardShape].String())
+			}),
 		}
 		if s.ledMode == "" {
 			return rs
@@ -500,6 +504,27 @@ func firstLine(s string) string { f, _, _ := strings.Cut(s, "\n"); return f }
 
 // zooms are the view's zooms 界面缩放 steps through; 1.5 by default: at 1 the 1080p panel's 5.5 inches make text too small
 var zooms = []float32{1, 1.25, 1.5, 1.75, 2}
+
+// cardShape is a card's width:height; 卡片比例 steps through cardShapes. 2:3 fits Steam's capsules, 1:1 a Game Boy's box art
+type cardShape struct{ w, h float32 }
+
+func (s cardShape) String() string { return fmt.Sprintf("%g:%g", s.w, s.h) }
+
+// aspect is height over width
+func (s cardShape) aspect() float32 { return s.h / s.w }
+
+var cardShapes = []cardShape{{2, 3}, {3, 4}, {1, 1}}
+
+// readCardShape is the index in cardShapes of mygo-pocket.ui.card, 0 (2:3) when unset
+func readCardShape() int {
+	v := getSetting("mygo-pocket.ui.card")
+	for i, s := range cardShapes {
+		if s.String() == v {
+			return i
+		}
+	}
+	return 0
+}
 
 func readZoom() float32 {
 	var z float32

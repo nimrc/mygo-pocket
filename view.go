@@ -277,7 +277,8 @@ func batteryIcon(c *ui.Context, b battery) {
 // following it as gamesCompact's does. The size is in the view's units, which follow the panel's short side: at 1.5x a poster is half the
 // panel's height on any handheld, whatever the number of cards
 func (l *launcher) gamesView(c *ui.Context, w float32) {
-	const gap, cw = 24, 240
+	const gap = 24
+	cw := l.cardWidth(240)
 	games := l.shown()
 	if len(games) == 0 {
 		l.noGames(c)
@@ -320,7 +321,7 @@ func (l *launcher) gamesCompact(c *ui.Context, w, h float32) {
 		l.noGames(c)
 		return
 	}
-	cw := min(h*0.5/1.5, (w-32-2*28-gap*2)/3) // 2:3 posters half the height; three across with the arrows beside them
+	cw := min(l.cardWidth(h*0.5/1.5), (w-32-2*28-gap*2)/3) // as large as 2:3 posters half the height; three across with the arrows beside them
 	n := min(3, len(games))
 	first := clamp(l.card-n/2, 0, len(games)-n)
 	ui.Column(c).Grow(1).Justify(ui.Center).AlignItems(ui.Center).Gap(14).Children(func() {
@@ -343,10 +344,15 @@ func (l *launcher) noGames(c *ui.Context) {
 	})
 }
 
+// cardWidth is the width of a card in the chosen shape with the area of a 2:3 card w2x3 wide, so a squarer card is wider but not larger
+func (l *launcher) cardWidth(w2x3 float32) float32 {
+	return w2x3 * float32(math.Sqrt(float64(1.5/cardShapes[l.cardShape].aspect())))
+}
+
 // poster is card i of the row shown, cw wide
 func (l *launcher) poster(c *ui.Context, i int, cw float32) {
 	g := l.shown()[i]
-	ch := cw * 1.5 // Steam's library capsules are 600x900
+	ch := cw * cardShapes[l.cardShape].aspect()
 	sel := i == l.card
 	cover := g.bmp
 	// the chosen card grows by its size, not a transform: a clip or a rounded image under a transform is masked on the CPU (MyGo's

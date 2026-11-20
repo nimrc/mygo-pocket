@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"time"
 	"os"
 	"strings"
@@ -178,6 +179,28 @@ func TestValueNeedsA(t *testing.T) {
 	})
 }
 
+// TestCardShape: 卡片比例 makes the cards squarer at the same area and keeps the shape in ROCKNIX's settings
+func TestCardShape(t *testing.T) {
+	onPanels(t, false, func(t *testing.T, p panel) {
+		h := newHarness(t, p, nil, threeGames(t))
+		if w := h.l.cardWidth(240); w != 240 {
+			t.Fatalf("2:3 card %g wide, want 240", w)
+		}
+		h.toCategory(2)
+		h.press("a")
+		h.shows("卡片比例", "2:3")
+		h.press("down", "down", "a", "right", "right", "a")
+		h.shows("1:1")
+		h.until("the shape is kept", func() bool { return sys.ran(`set_setting mygo-pocket.ui.card "1:1"`) })
+		if w := h.l.cardWidth(240); math.Abs(float64(w*w-240*360)) > 1 {
+			t.Errorf("1:1 card %g wide, want the area of a 240x360 card", w)
+		}
+		h.press("b", "b") // out of the rows, then back to the games: square cards
+		h.shows("Alpha")
+		h.shot("square cards")
+	})
+}
+
 func TestStickLights(t *testing.T) {
 	onPanels(t, false, func(t *testing.T, p panel) {
 		h := newHarness(t, p, nil, threeGames(t))
@@ -186,7 +209,7 @@ func TestStickLights(t *testing.T) {
 		h.press("a")
 		h.shows("摇杆灯", "电量")
 		h.hides("颜色")
-		h.press("down", "down", "down") // over the section title
+		h.press("down", "down", "down", "down") // over the section title
 		if r := categories[h.l.cat].rows(h.l)[h.l.sel]; r.key != "led-brightness" {
 			t.Fatalf("on %q, want the lights' brightness", r.label)
 		}
